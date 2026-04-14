@@ -1,0 +1,10 @@
+AIMeeting-Docker/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+tmp/
+temp/
+models/*
+!models/.gitkeep
+!models/README.md

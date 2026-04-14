@@ -1,0 +1,18 @@
+[app]
+name = "MSR"
+service_name = "Multi Speaker Recognization"
+version = "0.1.0"
+host = "0.0.0.0"
+port = 8011
+log_level = "INFO"
+default_language = "zh"
+temp_dir = "tmp"
+strict_offline = true
+
+[security]
+api_key = "change-me"
+api_key_header = "X-API-Key"
+
+[web]
+title = "MSR Console"
+resource_refresh_seconds = 3

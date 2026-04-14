@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import os
+from pathlib import Path
+import tomllib
+from typing import Any
+
+from msr.core.errors import ConfigurationError
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _load_toml(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+@dataclass(slots=True)
+class SecurityConfig:
+    api_key: str
+    api_key_header: str = "X-API-Key"
+
+
+@dataclass(slots=True)
+class AppConfig:
+    name: str
+    service_name: str
+    version: str
+    host: str
+    port: int
+    log_level: str
+    default_language: str
+    temp_dir: Path
+    strict_offline: bool
+
+
+@dataclass(slots=True)
+class WebConfig:
+    title: str
+    resource_refresh_seconds: int = 3
+
+
+@dataclass(slots=True)
+class ModelConfig:
+    id: str
+    kind: str
+    backend: str
+    local_path: Path
+    device: str = "cpu"
+    enabled: bool = True
+    default: bool = False
+    options: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Settings:
+    project_root: Path
+    app: AppConfig
+    security: SecurityConfig
+    web: WebConfig
+    models: list[ModelConfig]
+
+    @property
+    def offline_env(self) -> dict[str, str]:
+        return {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "MS_SDK_OFFLINE": "1",
+            "AIMEETING_STRICT_OFFLINE": "1",
+        }
+
+
+def load_settings(project_root: Path | None = None) -> Settings:
+    root = project_root or _project_root()
+    app_config_path = root / "config" / "app.toml"
+    models_config_path = root / "config" / "models.toml"
+
+    app_raw = _load_toml(app_config_path)
+    models_raw = _load_toml(models_config_path)
+
+    app_section = app_raw.get("app", {})
+    security_section = app_raw.get("security", {})
+    web_section = app_raw.get("web", {})
+
+    temp_dir = Path(app_section.get("temp_dir", "tmp"))
+    if not temp_dir.is_absolute():
+        temp_dir = root / temp_dir
+
+    api_key = os.getenv("MSR_API_KEY", security_section.get("api_key", ""))
+    if not api_key:
+        raise ConfigurationError("Missing API key. Set MSR_API_KEY or security.api_key.")
+
+    models = []
+    for raw in models_raw.get("models", []):
+        model_path = Path(raw["local_path"])
+        if not model_path.is_absolute():
+            model_path = root / model_path
+        models.append(
+            ModelConfig(
+                id=raw["id"],
+                kind=raw["kind"],
+                backend=raw["backend"],
+                local_path=model_path,
+                device=raw.get("device", "cpu"),
+                enabled=bool(raw.get("enabled", True)),
+                default=bool(raw.get("default", False)),
+                options=dict(raw.get("options", {})),
+            )
+        )
+
+    return Settings(
+        project_root=root,
+        app=AppConfig(
+            name=app_section.get("name", "MSR"),
+            service_name=app_section.get("service_name", "Multi Speaker Recognization"),
+            version=app_section.get("version", "0.1.0"),
+            host=app_section.get("host", "0.0.0.0"),
+            port=int(app_section.get("port", 8011)),
+            log_level=app_section.get("log_level", "INFO"),
+            default_language=app_section.get("default_language", "zh"),
+            temp_dir=temp_dir,
+            strict_offline=bool(app_section.get("strict_offline", True)),
+        ),
+        security=SecurityConfig(
+            api_key=api_key,
+            api_key_header=security_section.get("api_key_header", "X-API-Key"),
+        ),
+        web=WebConfig(
+            title=web_section.get("title", "MSR Console"),
+            resource_refresh_seconds=int(web_section.get("resource_refresh_seconds", 3)),
+        ),
+        models=models,
+    )

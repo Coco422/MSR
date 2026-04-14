@@ -1,0 +1,49 @@
+[[models]]
+id = "funasr-paraformer-zh"
+kind = "asr"
+backend = "funasr"
+local_path = "models/funasr/paraformer-zh"
+device = "cuda"
+enabled = true
+default = true
+
+[models.options]
+batch_size_s = 60
+language = "zh"
+
+[[models]]
+id = "faster-whisper-large-v3"
+kind = "asr"
+backend = "faster_whisper"
+local_path = "models/faster-whisper/large-v3"
+device = "cuda"
+enabled = true
+default = false
+
+[models.options]
+compute_type = "float16"
+beam_size = 5
+
+[[models]]
+id = "3dspeaker-default"
+kind = "diarization"
+backend = "3d_speaker"
+local_path = "models/3d-speaker"
+device = "cuda"
+enabled = true
+default = true
+
+[models.options]
+include_overlap = false
+
+[[models]]
+id = "pyannote-community-1"
+kind = "diarization"
+backend = "pyannote"
+local_path = "models/pyannote/speaker-diarization-community-1"
+device = "cuda"
+enabled = true
+default = false
+
+[models.options]
+min_speakers = 1

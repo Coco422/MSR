@@ -1,0 +1,24 @@
+services:
+  msr:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: msr-gpu-runtime:latest
+    container_name: msr-gpu-runtime
+    ports:
+      - "8011:8011"
+    environment:
+      MSR_API_KEY: ${MSR_API_KEY:-change-this}
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - ./config:/app/config:ro
+      - ./models:/app/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

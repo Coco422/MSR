@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MSR Console</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">MSR</p>
+          <h1>Multi Speaker Recognization Console</h1>
+          <p class="subtitle">离线优先的模型管理、资源监控与多说话人转写控制台。</p>
+        </div>
+        <div class="hero-card">
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" type="password" placeholder="输入 X-API-Key" />
+          <button id="saveKeyButton">保存</button>
+          <p id="authStatus" class="muted">尚未校验</p>
+        </div>
+      </header>
+
+      <section class="panel-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>当前激活模型</h2>
+            <button id="refreshRuntimeButton" class="ghost">刷新</button>
+          </div>
+          <pre id="runtimeState" class="code-block">Loading...</pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>系统资源</h2>
+            <button id="refreshResourcesButton" class="ghost">刷新</button>
+          </div>
+          <pre id="resourceState" class="code-block">Loading...</pre>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>模型注册表</h2>
+          <button id="refreshModelsButton" class="ghost">刷新</button>
+        </div>
+        <div id="modelsTable"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>转写</h2>
+        </div>
+        <form id="transcribeForm" class="transcribe-form">
+          <input id="audioInput" name="audio" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a" required />
+          <button type="submit">上传并转写</button>
+        </form>
+        <pre id="transcribeResult" class="code-block">等待上传音频...</pre>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
