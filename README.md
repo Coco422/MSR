@@ -216,6 +216,8 @@ docker run --rm --gpus all --network none \
 
 详细版 roadmap 见 [docs/roadmap.md](docs/roadmap.md)。
 
+Linux + GPU 交接步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
+
 ## 12. 上游依赖项目链接
 
 - FunASR：用于 ASR 后端
