@@ -28,6 +28,7 @@ class FunASRBackend(ASRBackend):
             self._model = AutoModel(
                 model=str(local_path),
                 device=_normalize_device(device),
+                disable_update=bool(load_options.get("disable_update", True)),
             )
             self.options = load_options
             self.loaded = True

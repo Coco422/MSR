@@ -64,6 +64,7 @@ uv run msr-api
 - `default-runtime`：默认主链 `FunASR + 3D-Speaker + WebRTC VAD`
 - `gpu-runtime`：包含默认链路和备选链路 `faster-whisper + pyannote`
 - Linux + NVIDIA 环境默认锁定 `torch 2.10 / torchaudio 2.10 / torchvision 0.25`，避免 CUDA 12.8 驱动误拉到 `cu130`
+- `FunASR` 默认启用 `disable_update=True`，避免离线部署时做版本检查
 
 默认访问：
 
@@ -107,6 +108,7 @@ uv run python tools/doctor.py --include-alternates
 - 性能：单条样本处理约 `4.03s`，处理速度约 `4.27x`
 - 管理面：`runtime/tasks`、`runtime/active`、`system/resources` 已验证能返回真实任务与 GPU 信息
 - 额外回归：`three-guys-record.mp3` 已验证按有效说话人分段返回，不再出现整段文本落到单一说话人的情况
+- 离线稳定性：`FunASR` 更新检查提示已关闭，模型加载日志中不再出现版本检查提示
 
 ## 6. 配置说明
 

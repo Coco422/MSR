@@ -4,13 +4,14 @@ from io import BytesIO
 from pathlib import Path
 import threading
 import time
+import types
 
 import numpy as np
 import soundfile as sf
 from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
-from msr.backends.asr.funasr_backend import _parse_funasr_result
+from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment
 from msr.services.audio_io import probe_duration
@@ -453,6 +454,23 @@ def test_funasr_timestamp_parser_splits_segments_and_converts_milliseconds(tmp_p
         ("你好啊", 0.1, 0.52),
         ("我来了", 1.2, 1.7),
     ]
+
+
+def test_funasr_load_disables_update_check_by_default(monkeypatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    class FakeAutoModel:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setitem(__import__("sys").modules, "funasr", types.SimpleNamespace(AutoModel=FakeAutoModel))
+
+    backend = FunASRBackend("funasr-paraformer-zh")
+    backend.load(tmp_path, "cuda")
+
+    assert captured["model"] == str(tmp_path)
+    assert captured["device"] == "cuda:0"
+    assert captured["disable_update"] is True
 
 
 def test_speaker_outputs_filter_invalid_speakers_and_relabel_sequentially():
