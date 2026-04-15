@@ -26,6 +26,7 @@ cd /path/to/MSR
 cp .env.example .env
 export MSR_API_KEY="$(grep MSR_API_KEY .env | cut -d= -f2-)"
 uv sync --extra dev --extra gpu-runtime
+uv run python tools/bootstrap_models.py
 uv run python tools/doctor.py
 ```
 

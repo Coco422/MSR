@@ -65,6 +65,12 @@ Linux + NVIDIA GPU 验收步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-ha
 
 模型注册来源于 `config/models.toml`。
 
+如果要在联网环境先预热默认模型目录，可使用：
+
+```bash
+uv run python tools/bootstrap_models.py
+```
+
 启动服务后：
 
 1. 调用 `GET /api/v1/models`
