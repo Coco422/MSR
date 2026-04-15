@@ -47,12 +47,15 @@ Outputs:
 - explicit model load/unload
 - `/transcribe/` compatibility response
 - resource monitoring
+- bounded parallel execution and bounded queueing for synchronous requests
+- runtime task observation for active, queued and recent jobs
 
 Acceptance:
 
 - service can run with `--network none`
 - startup does not trigger downloads
 - loaded models can process a sample file end-to-end
+- overload returns a readable `queue_full` error instead of unbounded pile-up
 
 ## Phase 3: Alternate Backends
 
@@ -65,12 +68,14 @@ Outputs:
 - alternate ASR adapter
 - alternate diarization adapter
 - config-driven backend switching
+- preliminary design for cross-audio speaker identity registry
 
 Acceptance:
 
 - switching does not require a service restart
 - failure messages stay readable
 - default path remains unaffected
+- roadmap covers how speaker identity can persist beyond a single audio file
 
 ## Phase 4: Hardening
 
@@ -84,9 +89,11 @@ Outputs:
 - stable Docker GPU runtime
 - smoke test instructions
 - fully updated README
+- admin console that reflects runtime limits, queue state and recent task summaries
 
 Acceptance:
 
 - offline deployment can be repeated from docs
 - common errors are diagnosable
 - GPU image passes load, transcribe, unload smoke flow
+- runtime controls can be audited from the management plane

@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 tmp/
 temp/
+data/
 models/*
 !models/.gitkeep
 !models/README.md
