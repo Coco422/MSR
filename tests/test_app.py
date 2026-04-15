@@ -10,10 +10,12 @@ import soundfile as sf
 from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
+from msr.backends.asr.funasr_backend import _parse_funasr_result
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment
 from msr.services.audio_io import probe_duration
 from msr.services.model_manager import ASR_FACTORIES, DIARIZATION_FACTORIES
+from msr.services.transcription_service import _build_speaker_presentations, _build_speakers_info, _build_transcripts
 
 
 class FakeASRBackend:
@@ -425,3 +427,61 @@ recent_task_limit = 9
     assert settings.runtime.max_queued_tasks == 7
     assert settings.runtime.recent_task_limit == 9
     assert settings.runtime.data_dir == data_dir
+
+
+def test_funasr_timestamp_parser_splits_segments_and_converts_milliseconds(tmp_path: Path):
+    audio_path = tmp_path / "sample.wav"
+    sf.write(str(audio_path), np.zeros(32000, dtype=np.float32), 16000)
+
+    raw = [
+        {
+            "text": "你 好 啊 我 来 了",
+            "timestamp": [
+                [100, 240],
+                [240, 380],
+                [380, 520],
+                [1200, 1360],
+                [1360, 1520],
+                [1520, 1700],
+            ],
+        }
+    ]
+
+    segments = _parse_funasr_result(raw, audio_path)
+
+    assert [(segment.text, round(segment.start, 2), round(segment.end, 2)) for segment in segments] == [
+        ("你好啊", 0.1, 0.52),
+        ("我来了", 1.2, 1.7),
+    ]
+
+
+def test_speaker_outputs_filter_invalid_speakers_and_relabel_sequentially():
+    speaker_segments = [
+        SpeakerSegment(speaker_id="4", start=0.0, end=8.0),
+        SpeakerSegment(speaker_id="1", start=8.0, end=14.0),
+        SpeakerSegment(speaker_id="0", start=18.0, end=21.0),
+        SpeakerSegment(speaker_id="3", start=21.0, end=26.0),
+        SpeakerSegment(speaker_id="9", start=30.0, end=31.0),
+    ]
+    speaker_texts = {
+        "4": [TextSegment(start=0.1, end=3.0, text="今天天气不错啊")],
+        "1": [TextSegment(start=8.2, end=11.0, text="我明天中午吃麻辣烫")],
+        "0": [TextSegment(start=18.2, end=21.0, text="明天中午吃麦当劳")],
+        "3": [TextSegment(start=21.1, end=24.0, text="会不会吃了太胖了")],
+    }
+
+    presentations = _build_speaker_presentations(speaker_texts)
+    transcripts = _build_transcripts(speaker_texts, presentations)
+    speakers_info = _build_speakers_info(speaker_segments, speaker_texts, presentations)
+
+    assert [item["speaker_id"] for item in speakers_info] == ["0", "1", "2", "3"]
+    assert [item["speaker_label"] for item in speakers_info] == [
+        "说话人 A",
+        "说话人 B",
+        "说话人 C",
+        "说话人 D",
+    ]
+    assert len(transcripts) == 4
+    assert [item["speaker_id"] for item in transcripts] == ["0", "1", "2", "3"]
+    assert transcripts[0]["speaker_label"] == "说话人 A"
+    assert all(item["speaker_id"] != "9" for item in speakers_info)

@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any
 
 from msr.backends.asr.base import ASRBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
 from msr.core.types import TextSegment
 from msr.services.audio_io import probe_duration
+
+_FUNASR_PAUSE_SPLIT_SECONDS = 0.4
+_FUNASR_MAX_SEGMENT_SECONDS = 6.0
+_CJK_RANGES = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_CHINESE_PUNCTUATION = "，。！？；：、“”‘’（）《》〈〉【】—…·"
 
 
 class FunASRBackend(ASRBackend):
@@ -74,24 +80,20 @@ def _parse_funasr_result(raw: Any, audio_path: Path) -> list[TextSegment]:
 
         sentence_info = item.get("sentence_info")
         if isinstance(sentence_info, list):
-            for sentence in sentence_info:
-                text = str(sentence.get("text", "")).strip()
-                if not text:
-                    continue
-                start = _to_seconds(sentence.get("start", 0.0))
-                end = _to_seconds(sentence.get("end", duration))
-                segments.append(TextSegment(start=start, end=end, text=text))
-            continue
-
-        timestamp = item.get("timestamp")
-        text = str(item.get("text", "")).strip()
-        if isinstance(timestamp, list) and text:
-            if timestamp and isinstance(timestamp[0], (list, tuple)) and len(timestamp[0]) >= 2:
-                start = _to_seconds(timestamp[0][0])
-                end = _to_seconds(timestamp[-1][1])
-                segments.append(TextSegment(start=start, end=end, text=text))
+            sentence_segments = _parse_sentence_info(sentence_info, duration)
+            if sentence_segments:
+                segments.extend(sentence_segments)
                 continue
 
+        timestamp = item.get("timestamp")
+        raw_text = str(item.get("text", "")).strip()
+        if isinstance(timestamp, list) and raw_text:
+            timestamp_segments = _parse_timestamp_segments(raw_text, timestamp, duration)
+            if timestamp_segments:
+                segments.extend(timestamp_segments)
+                continue
+
+        text = _normalize_text(raw_text)
         if text:
             segments.append(TextSegment(start=0.0, end=duration, text=text))
 
@@ -101,11 +103,131 @@ def _parse_funasr_result(raw: Any, audio_path: Path) -> list[TextSegment]:
     return [TextSegment(start=0.0, end=duration, text="[Empty transcription]")]
 
 
-def _to_seconds(value: Any) -> float:
+def _parse_sentence_info(sentence_info: list[Any], audio_duration: float) -> list[TextSegment]:
+    pairs = []
+    for sentence in sentence_info:
+        if not isinstance(sentence, dict):
+            continue
+        pairs.append((sentence.get("start", 0.0), sentence.get("end", audio_duration)))
+
+    scale = _infer_timestamp_scale(pairs, audio_duration)
+    segments: list[TextSegment] = []
+    for sentence in sentence_info:
+        if not isinstance(sentence, dict):
+            continue
+        text = _normalize_text(str(sentence.get("text", "")).strip())
+        if not text:
+            continue
+        start = _timestamp_to_seconds(sentence.get("start", 0.0), scale)
+        end = _timestamp_to_seconds(sentence.get("end", audio_duration), scale)
+        if end <= start:
+            continue
+        segments.append(TextSegment(start=start, end=end, text=text))
+    return segments
+
+
+def _parse_timestamp_segments(raw_text: str, timestamp: list[Any], audio_duration: float) -> list[TextSegment]:
+    pairs = _timestamp_pairs(timestamp)
+    if not pairs:
+        return []
+
+    tokens = [token for token in raw_text.split() if token]
+    scale = _infer_timestamp_scale(pairs, audio_duration)
+
+    if len(tokens) != len(pairs):
+        text = _normalize_text(raw_text)
+        if not text:
+            return []
+        start = _timestamp_to_seconds(pairs[0][0], scale)
+        end = _timestamp_to_seconds(pairs[-1][1], scale)
+        if end <= start:
+            return []
+        return [TextSegment(start=start, end=end, text=text)]
+
+    segments: list[TextSegment] = []
+    current_tokens: list[str] = []
+    current_start = 0.0
+    current_end = 0.0
+
+    for token, (start_raw, end_raw) in zip(tokens, pairs):
+        start = _timestamp_to_seconds(start_raw, scale)
+        end = _timestamp_to_seconds(end_raw, scale)
+        if end <= start:
+            continue
+
+        if not current_tokens:
+            current_tokens = [token]
+            current_start = start
+            current_end = end
+            continue
+
+        gap = max(0.0, start - current_end)
+        duration = current_end - current_start
+        if gap >= _FUNASR_PAUSE_SPLIT_SECONDS or duration >= _FUNASR_MAX_SEGMENT_SECONDS:
+            segment = _build_text_segment(current_tokens, current_start, current_end)
+            if segment:
+                segments.append(segment)
+            current_tokens = [token]
+            current_start = start
+            current_end = end
+            continue
+
+        current_tokens.append(token)
+        current_end = end
+
+    segment = _build_text_segment(current_tokens, current_start, current_end)
+    if segment:
+        segments.append(segment)
+    return segments
+
+
+def _build_text_segment(tokens: list[str], start: float, end: float) -> TextSegment | None:
+    text = _normalize_text(" ".join(tokens))
+    if not text or end <= start:
+        return None
+    return TextSegment(start=start, end=end, text=text)
+
+
+def _timestamp_pairs(timestamp: list[Any]) -> list[tuple[Any, Any]]:
+    pairs: list[tuple[Any, Any]] = []
+    for item in timestamp:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            pairs.append((item[0], item[1]))
+    return pairs
+
+
+def _infer_timestamp_scale(pairs: list[tuple[Any, Any]], audio_duration: float) -> float:
+    values = []
+    for start, end in pairs:
+        for value in (start, end):
+            try:
+                values.append(abs(float(value)))
+            except (TypeError, ValueError):
+                continue
+
+    if not values:
+        return 1.0
+
+    max_value = max(values)
+    if max_value > max(audio_duration * 2 + 1.0, 10.0):
+        return 0.001
+    return 1.0
+
+
+def _timestamp_to_seconds(value: Any, scale: float) -> float:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
         return 0.0
-    if numeric > 1000:
-        return numeric / 1000.0
-    return numeric
+    return numeric * scale
+
+
+def _normalize_text(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
+        return ""
+
+    normalized = re.sub(fr"(?<=[{_CJK_RANGES}])\s+(?=[{_CJK_RANGES}])", "", normalized)
+    normalized = re.sub(fr"\s+(?=[{_CHINESE_PUNCTUATION}])", "", normalized)
+    normalized = re.sub(fr"(?<=[{_CHINESE_PUNCTUATION}])\s+", "", normalized)
+    return normalized

@@ -109,10 +109,16 @@ class TranscriptionService:
             for start, end in vad_ranges:
                 clip = write_clip(audio, sample_rate, start, end, prepared.task_dir)
                 for segment in asr_backend.transcribe(clip.path, language=prepared.language, timestamps=True):
+                    segment_start = max(0.0, start + segment.start)
+                    segment_end = min(end, start + segment.end)
+                    if segment_end <= segment_start:
+                        continue
+                    if not str(segment.text).strip():
+                        continue
                     text_segments.append(
                         TextSegment(
-                            start=start + segment.start,
-                            end=min(end, start + segment.end),
+                            start=segment_start,
+                            end=segment_end,
                             text=segment.text,
                             confidence=segment.confidence,
                         )
@@ -120,23 +126,9 @@ class TranscriptionService:
 
             update_stage("postprocess", audio_duration)
             speaker_texts = _match_text_to_speakers(text_segments, speaker_segments)
-            speakers_info = _build_speakers_info(speaker_segments)
-            transcripts = []
-            for speaker_id, segments in speaker_texts.items():
-                speaker_label = _speaker_label(speaker_id)
-                for segment in segments:
-                    transcripts.append(
-                        {
-                            "speaker_id": speaker_id,
-                            "speaker_label": speaker_label,
-                            "text": segment.text,
-                            "start_time": format_time(segment.start),
-                            "end_time": format_time(segment.end),
-                            "confidence": segment.confidence,
-                        }
-                    )
-
-            transcripts.sort(key=lambda item: _parse_time(item["start_time"]))
+            speaker_presentations = _build_speaker_presentations(speaker_texts)
+            speakers_info = _build_speakers_info(speaker_segments, speaker_texts, speaker_presentations)
+            transcripts = _build_transcripts(speaker_texts, speaker_presentations)
 
         processing_seconds = max(time.perf_counter() - started_at, 0.0)
         processing_speed = audio_duration_seconds / processing_seconds if processing_seconds > 0 else 0.0
@@ -167,35 +159,101 @@ def _match_text_to_speakers(text_segments: list[TextSegment], speaker_segments: 
     return grouped
 
 
-def _build_speakers_info(speaker_segments: list[SpeakerSegment]) -> list[dict]:
+def _build_transcripts(
+    speaker_texts: dict[str, list[TextSegment]],
+    speaker_presentations: dict[str, dict[str, str]],
+) -> list[dict]:
+    items: list[tuple[float, dict]] = []
+    for raw_speaker_id, segments in speaker_texts.items():
+        presentation = speaker_presentations.get(raw_speaker_id)
+        if not presentation:
+            continue
+        for segment in segments:
+            if segment.end <= segment.start:
+                continue
+            items.append(
+                (
+                    segment.start,
+                    {
+                        "speaker_id": presentation["speaker_id"],
+                        "speaker_label": presentation["speaker_label"],
+                        "text": segment.text,
+                        "start_time": format_time(segment.start),
+                        "end_time": format_time(segment.end),
+                        "confidence": segment.confidence,
+                    },
+                )
+            )
+
+    items.sort(key=lambda item: item[0])
+    return [payload for _, payload in items]
+
+
+def _build_speaker_presentations(speaker_texts: dict[str, list[TextSegment]]) -> dict[str, dict[str, str]]:
+    valid_speakers = [
+        speaker_id
+        for speaker_id, segments in speaker_texts.items()
+        if any(segment.end > segment.start and str(segment.text).strip() for segment in segments)
+    ]
+    valid_speakers.sort(key=lambda speaker_id: (_speaker_first_start(speaker_texts[speaker_id]), _speaker_sort_key(speaker_id)))
+
+    return {
+        raw_speaker_id: {
+            "speaker_id": str(index),
+            "speaker_label": _speaker_label(index),
+        }
+        for index, raw_speaker_id in enumerate(valid_speakers)
+    }
+
+
+def _build_speakers_info(
+    speaker_segments: list[SpeakerSegment],
+    speaker_texts: dict[str, list[TextSegment]],
+    speaker_presentations: dict[str, dict[str, str]],
+) -> list[dict]:
     grouped: dict[str, list[SpeakerSegment]] = defaultdict(list)
     for segment in speaker_segments:
         grouped[segment.speaker_id].append(segment)
 
     items = []
-    for speaker_id, segments in grouped.items():
-        total = sum(segment.end - segment.start for segment in segments)
+    for raw_speaker_id, presentation in speaker_presentations.items():
+        segments = grouped.get(raw_speaker_id, [])
+        if segments:
+            total = sum(segment.end - segment.start for segment in segments)
+            segment_count = len(segments)
+        else:
+            text_segments = speaker_texts.get(raw_speaker_id, [])
+            total = sum(max(0.0, segment.end - segment.start) for segment in text_segments)
+            segment_count = len(text_segments)
         items.append(
             {
-                "speaker_id": speaker_id,
-                "speaker_label": _speaker_label(speaker_id),
+                "speaker_id": presentation["speaker_id"],
+                "speaker_label": presentation["speaker_label"],
                 "total_duration": format_time(total),
-                "segment_count": len(segments),
+                "segment_count": segment_count,
             }
         )
-    items.sort(key=lambda item: item["segment_count"], reverse=True)
     return items
 
 
-def _speaker_label(speaker_id: str) -> str:
-    normalized = str(speaker_id)
-    numeric = normalized.replace("spk_", "").replace("speaker_", "")
+def _speaker_first_start(segments: list[TextSegment]) -> float:
+    starts = [segment.start for segment in segments if segment.end > segment.start]
+    if not starts:
+        return float("inf")
+    return min(starts)
+
+
+def _speaker_sort_key(value: str) -> tuple[int, str]:
+    numeric = str(value).replace("spk_", "").replace("speaker_", "")
     if numeric.isdigit():
-        number = int(numeric)
-        if number < 26:
-            return f"说话人 {chr(65 + number)}"
-        return f"说话人 {number + 1}"
-    return f"说话人 {normalized}"
+        return (0, f"{int(numeric):08d}")
+    return (1, str(value))
+
+
+def _speaker_label(index: int) -> str:
+    if index < 26:
+        return f"说话人 {chr(65 + index)}"
+    return f"说话人 {index + 1}"
 
 
 def format_time(seconds: float) -> str:
