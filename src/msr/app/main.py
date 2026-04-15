@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,9 +16,13 @@ from msr.services.container import ServiceContainer
 from msr.app.lifespan import app_lifespan
 
 
+logger = logging.getLogger(__name__)
+
+
 def create_app(settings: Settings | None = None, project_root: Path | None = None) -> FastAPI:
     resolved_settings = settings or load_settings(project_root=project_root)
     configure_logging(resolved_settings.app.log_level)
+    logger.debug("Creating FastAPI application instance")
 
     app = FastAPI(
         title=resolved_settings.app.name,
@@ -57,9 +62,12 @@ def create_app(settings: Settings | None = None, project_root: Path | None = Non
 
 
 def run() -> None:
-    app = create_app()
     settings = app.state.container.settings
     uvicorn.run(app, host=settings.app.host, port=settings.app.port)
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    run()

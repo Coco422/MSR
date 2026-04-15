@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 from io import BytesIO
+import builtins
 import json
 from pathlib import Path
 import threading
 import time
 import types
+import sys
 
 import numpy as np
+import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
+from msr.backends.asr.faster_whisper_backend import FasterWhisperBackend
 from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
-from msr.backends.diarization.pyannote_backend import _extract_pyannote_annotation, _resolve_pyannote_checkpoint
+from msr.backends.diarization.pyannote_backend import (
+    PyannoteBackend,
+    _extract_pyannote_annotation,
+    _resolve_pyannote_checkpoint,
+)
+from msr.core.errors import BackendLoadError
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import probe_duration
@@ -624,6 +633,51 @@ def test_funasr_load_disables_update_check_by_default(monkeypatch, tmp_path: Pat
     assert captured["model"] == str(tmp_path)
     assert captured["device"] == "cuda:0"
     assert captured["disable_update"] is True
+
+
+def test_faster_whisper_load_reports_runtime_hint_when_dependency_is_missing(monkeypatch, tmp_path: Path):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "faster_whisper":
+            raise ModuleNotFoundError("No module named 'faster_whisper'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    backend = FasterWhisperBackend("faster-whisper-large-v3")
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path, "cuda")
+
+    message = str(exc_info.value)
+    assert "missing dependency 'faster_whisper'" in message
+    assert "tools/runtime_env.sh run pyannote" in message
+    assert "python=" in message
+
+
+def test_pyannote_load_reports_runtime_hint_when_dependency_is_missing(monkeypatch, tmp_path: Path):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "pyannote.audio":
+            raise ModuleNotFoundError("No module named 'pyannote.audio'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(
+        "msr.backends.diarization.pyannote_backend._ensure_torchaudio_pyannote_compat",
+        lambda: None,
+    )
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(device=lambda value: value))
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    backend = PyannoteBackend("pyannote-community-1")
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path, "cuda")
+
+    message = str(exc_info.value)
+    assert "missing dependency 'pyannote.audio'" in message
+    assert "tools/runtime_env.sh run pyannote" in message
+    assert "python=" in message
 
 
 def test_speaker_outputs_filter_invalid_speakers_and_relabel_sequentially():

@@ -17,6 +17,7 @@ MSR 运行环境切换脚本
 说明:
   default   : FunASR + 3D-Speaker + WebRTC VAD，偏兼容与当前默认链
   pyannote  : faster-whisper + pyannote，偏准确率优先
+  注意      : 需要切换到 pyannote 链路时，不要直接执行 uv run msr-api
 
 示例:
   bash tools/runtime_env.sh setup default
@@ -63,8 +64,8 @@ create_default_env() {
   local python="${dir}/bin/python"
   echo "[default] 创建虚拟环境: ${dir}"
   uv venv --python "${PYTHON_BIN}" "${dir}"
-  echo "[default] 安装基础依赖: dev"
-  uv sync --python "${python}" --extra dev
+  echo "[default] 安装项目基础依赖: dev"
+  uv pip install --python "${python}" -e ".[dev]"
   echo "[default] 安装 torch / FunASR / 3D-Speaker 运行栈"
   uv pip install --python "${python}" \
     "torch==2.10.*" \
@@ -82,8 +83,8 @@ create_pyannote_env() {
   local python="${dir}/bin/python"
   echo "[pyannote] 创建虚拟环境: ${dir}"
   uv venv --python "${PYTHON_BIN}" "${dir}"
-  echo "[pyannote] 安装基础依赖: dev"
-  uv sync --python "${python}" --extra dev
+  echo "[pyannote] 安装项目基础依赖: dev"
+  uv pip install --python "${python}" -e ".[dev]"
   echo "[pyannote] 安装 torch / faster-whisper / pyannote 运行栈"
   uv pip install --python "${python}" \
     "torch==2.10.*" \
@@ -128,10 +129,15 @@ run_profile() {
   local profile="${1}"
   ensure_profile_exists "${profile}"
   local dir
+  local pythonpath="${ROOT_DIR}/src"
   dir="$(profile_dir "${profile}")"
   cd "${ROOT_DIR}"
   echo "[${profile}] 启动 MSR 服务"
-  exec env VIRTUAL_ENV="${dir}" PATH="${dir}/bin:${PATH}" "${dir}/bin/msr-api"
+  echo "[${profile}] Python: ${dir}/bin/python"
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    pythonpath="${pythonpath}:${PYTHONPATH}"
+  fi
+  exec env VIRTUAL_ENV="${dir}" PATH="${dir}/bin:${PATH}" PYTHONPATH="${pythonpath}" "${dir}/bin/python" -m msr.app.main
 }
 
 exec_profile() {
@@ -144,9 +150,14 @@ exec_profile() {
     exit 1
   fi
   local dir
+  local pythonpath="${ROOT_DIR}/src"
   dir="$(profile_dir "${profile}")"
   cd "${ROOT_DIR}"
-  exec env VIRTUAL_ENV="${dir}" PATH="${dir}/bin:${PATH}" "$@"
+  echo "[${profile}] Python: ${dir}/bin/python"
+  if [[ -n "${PYTHONPATH:-}" ]]; then
+    pythonpath="${pythonpath}:${PYTHONPATH}"
+  fi
+  exec env VIRTUAL_ENV="${dir}" PATH="${dir}/bin:${PATH}" PYTHONPATH="${pythonpath}" "$@"
 }
 
 main() {

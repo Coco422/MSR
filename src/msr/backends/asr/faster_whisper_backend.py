@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from msr.backends.asr.base import ASRBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
+from msr.core.runtime_env import format_runtime_context
 from msr.core.types import TextSegment
 from msr.services.audio_io import probe_duration
+
+
+logger = logging.getLogger(__name__)
 
 
 class FasterWhisperBackend(ASRBackend):
@@ -15,10 +20,17 @@ class FasterWhisperBackend(ASRBackend):
 
     def load(self, local_path: Path, device: str, options: dict | None = None) -> None:
         load_options = {**self.options, **(options or {})}
+        compute_type = load_options.get("compute_type", "float16" if device.startswith("cuda") else "int8")
         try:
             from faster_whisper import WhisperModel
 
-            compute_type = load_options.get("compute_type", "float16" if device.startswith("cuda") else "int8")
+            logger.info(
+                "Initializing faster-whisper backend model_id=%s device=%s compute_type=%s path=%s",
+                self.model_id,
+                device,
+                compute_type,
+                local_path,
+            )
             self._model = WhisperModel(
                 model_size_or_path=str(local_path),
                 device="cuda" if device.startswith("cuda") else "cpu",
@@ -27,6 +39,16 @@ class FasterWhisperBackend(ASRBackend):
             )
             self.options = load_options
             self.loaded = True
+        except ModuleNotFoundError as exc:
+            missing_name = exc.name or ""
+            if missing_name == "faster_whisper" or "faster_whisper" in str(exc):
+                raise BackendLoadError(
+                    "Failed to load faster-whisper model from "
+                    f"{local_path}: missing dependency 'faster_whisper'. "
+                    f"Current runtime: {format_runtime_context()}. "
+                    "如果要启用 accuracy-first 链路，请使用 `bash tools/runtime_env.sh run pyannote` 启动服务。"
+                ) from exc
+            raise BackendLoadError(f"Failed to load faster-whisper model from {local_path}: {exc}") from exc
         except Exception as exc:
             raise BackendLoadError(f"Failed to load faster-whisper model from {local_path}: {exc}") from exc
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable
@@ -14,6 +15,7 @@ from msr.backends.diarization.pyannote_backend import PyannoteBackend
 from msr.backends.diarization.three_d_speaker_backend import ThreeDSpeakerBackend
 from msr.core.config import ModelConfig, Settings
 from msr.core.errors import ModelBusyError, ModelNotFoundError, ModelNotLoadedError
+from msr.core.runtime_env import format_runtime_context
 
 
 ASR_FACTORIES = {
@@ -25,6 +27,7 @@ DIARIZATION_FACTORIES = {
     "3d_speaker": ThreeDSpeakerBackend,
     "pyannote": PyannoteBackend,
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -117,16 +120,53 @@ class ModelManager:
 
             current = self._loaded.get(kind)
             if current and current.config.id == config.id:
+                logger.info(
+                    "Model load skipped kind=%s model_id=%s because it is already active",
+                    kind,
+                    model_id,
+                )
                 return self.active_state()[kind] or {}
 
             if current:
+                logger.info(
+                    "Unloading previous %s model model_id=%s before loading model_id=%s",
+                    kind,
+                    current.config.id,
+                    model_id,
+                )
                 current.backend.unload()
                 self._loaded[kind] = None
 
+            logger.info(
+                "Loading model kind=%s model_id=%s backend=%s device=%s path=%s %s",
+                config.kind,
+                config.id,
+                config.backend,
+                config.device,
+                config.local_path,
+                format_runtime_context(),
+            )
             backend = self._instantiate(config)
-            backend.load(config.local_path, config.device, config.options)
+            try:
+                backend.load(config.local_path, config.device, config.options)
+            except Exception:
+                logger.exception(
+                    "Model load failed kind=%s model_id=%s backend=%s path=%s",
+                    config.kind,
+                    config.id,
+                    config.backend,
+                    config.local_path,
+                )
+                raise
             self._loaded[kind] = LoadedModel(config=config, backend=backend)
-            return self.active_state()[kind] or {}
+            state = self.active_state()[kind] or {}
+            logger.info(
+                "Model loaded kind=%s model_id=%s active_state=%s",
+                kind,
+                model_id,
+                state,
+            )
+            return state
 
     def unload(self, kind: str, model_id: str) -> None:
         with self._lock:
@@ -135,8 +175,16 @@ class ModelManager:
             loaded = self._loaded.get(kind)
             if not loaded or loaded.config.id != model_id:
                 raise ModelNotLoadedError(f"Model {model_id} is not currently loaded for kind {kind}.")
+            logger.info(
+                "Unloading model kind=%s model_id=%s backend=%s path=%s",
+                kind,
+                model_id,
+                loaded.config.backend,
+                loaded.config.local_path,
+            )
             loaded.backend.unload()
             self._loaded[kind] = None
+            logger.info("Model unloaded kind=%s model_id=%s", kind, model_id)
 
     def get_asr_backend(self) -> ASRBackend:
         loaded = self._loaded.get("asr")

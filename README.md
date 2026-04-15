@@ -95,6 +95,9 @@ bash tools/runtime_env.sh setup pyannote
 - `default` 环境对应 `FunASR + 3D-Speaker + WebRTC VAD`
 - `pyannote` 环境对应 `faster-whisper + pyannote`
 - 之所以拆两个 venv，是因为 `speakerlab` 与 `pyannote 4.x` 存在上游依赖冲突
+- 如果要跑 `faster-whisper + pyannote`，不要直接执行 `uv run msr-api`
+- `uv run msr-api` 使用的是仓库默认 `.venv`，更适合默认链；准确率优先链请使用 `bash tools/runtime_env.sh run pyannote`
+- `tools/runtime_env.sh run/exec` 现在会显式切到对应 profile 的 Python，并补上 `PYTHONPATH=src`，不再依赖 profile 内一定存在 `msr-api` console script
 
 常用命令：
 
@@ -103,6 +106,12 @@ bash tools/runtime_env.sh run default
 bash tools/runtime_env.sh run pyannote
 bash tools/runtime_env.sh exec pyannote python tools/doctor.py --include-alternates
 ```
+
+调试建议：
+
+- 启动日志现在会打印当前 `python`、`prefix`、`venv`、`cwd`
+- 模型加载日志会打印模型类型、后端、设备、路径，以及缺失依赖时的独立环境提示
+- 如果只是想确认当前服务到底跑在哪个解释器里，优先看启动时的 `Application startup ... python=... venv=...`
 
 ### 先注册模型，再显式加载
 

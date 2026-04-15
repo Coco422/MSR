@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import Any
 import warnings
 
 from msr.backends.diarization.base import DiarizationBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
+from msr.core.runtime_env import format_runtime_context
 from msr.core.types import SpeakerSegment
 from msr.services.audio_io import load_audio
+
+
+logger = logging.getLogger(__name__)
 
 
 class PyannoteBackend(DiarizationBackend):
@@ -32,6 +37,12 @@ class PyannoteBackend(DiarizationBackend):
                 from pyannote.audio import Pipeline
 
             checkpoint_path = _resolve_pyannote_checkpoint(local_path)
+            logger.info(
+                "Initializing pyannote backend model_id=%s device=%s checkpoint=%s",
+                self.model_id,
+                device,
+                checkpoint_path,
+            )
             pipeline = Pipeline.from_pretrained(str(checkpoint_path))
             if device.startswith("cuda") and hasattr(pipeline, "to"):
                 pipeline.to(torch.device("cuda"))
@@ -40,6 +51,17 @@ class PyannoteBackend(DiarizationBackend):
             self._torch = torch
             self.options = load_options
             self.loaded = True
+        except ModuleNotFoundError as exc:
+            missing_name = exc.name or ""
+            if missing_name in {"pyannote", "pyannote.audio"} or "pyannote.audio" in str(exc):
+                raise BackendLoadError(
+                    "Failed to load pyannote pipeline from "
+                    f"{local_path}: missing dependency 'pyannote.audio'. "
+                    f"Current runtime: {format_runtime_context()}. "
+                    "请使用 `bash tools/runtime_env.sh run pyannote` 启动服务，或先执行 "
+                    "`bash tools/runtime_env.sh setup pyannote` 创建独立环境。"
+                ) from exc
+            raise BackendLoadError(f"Failed to load pyannote pipeline from {local_path}: {exc}") from exc
         except Exception as exc:
             raise BackendLoadError(f"Failed to load pyannote pipeline from {local_path}: {exc}") from exc
 

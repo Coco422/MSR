@@ -44,6 +44,9 @@
 - [x] `pyannote-community-1` 已下载到 `models/pyannote/speaker-diarization-community-1`
 - [x] `pyannote` 后端已兼容本地 `config.yaml` 加载、4.x `DiarizeOutput` 返回结构和内存 waveform 输入
 - [x] 已提供双 venv 切换脚本：默认链环境 / `faster-whisper + pyannote` 环境
+- [x] 双 venv 的 `setup/run/exec` 已修复并验证，profile 启动不再依赖缺失的 `msr-api` console script
+- [x] 启动阶段、模型加载阶段、任务阶段日志已补强，可直接看到当前解释器/venv、模型路径和阶段流转
+- [x] `faster-whisper` / `pyannote` 缺依赖时会返回更明确的环境切换提示，不再只报裸 `ModuleNotFoundError`
 
 ## 当前待推进
 
@@ -61,6 +64,7 @@
 - [ ] 继续优化 `FunASR + 3D-Speaker` 在多人短句场景下的切句质量，减少“嗯/哦”等极短片段
 - [ ] 评估是否要把同步示例页也升级成“同步/异步双模式”联调页面
 - [ ] 继续收敛默认链加载日志，评估是否要压低 `modelscope` / `datasets` 的纯信息级噪声
+- [ ] 评估是否要把启动日志再细分为 `INFO` / `DEBUG` 两档，避免生产期与调试期日志密度冲突
 - [ ] 收敛 `pyannote.audio` 导入时的 `torchcodec` 警告，决定是补系统 FFmpeg 兼容层还是显式屏蔽无害告警
 - [ ] 梳理 `speakerlab` 与 `pyannote 4.x` 的 `numpy` 依赖冲突，决定是否拆分 extra、拆容器或保留手工补装方案
 - [ ] 继续优化 VAD 与 speaker 边界协同，避免整段会话被并成单个超长 VAD 段

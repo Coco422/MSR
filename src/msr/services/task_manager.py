@@ -209,6 +209,13 @@ class TaskManager:
         job.record.started_at = _utc_now()
         job.record.queue_wait_ms = int((job.started_monotonic - job.submitted_monotonic) * 1000)
         self._active[job.record.task_id] = job
+        logger.info(
+            "Task %s entered execution stage=starting queue_wait_ms=%s active=%s queued=%s",
+            job.record.task_id,
+            job.record.queue_wait_ms,
+            len(self._active),
+            len(self._pending),
+        )
         task = loop.create_task(self._run_job(job))
         self._background_tasks[job.record.task_id] = task
 
@@ -270,13 +277,23 @@ class TaskManager:
 
     def _build_progress_callback(self, task_id: str) -> TaskProgressCallback:
         def progress(stage: str, audio_duration: str | None = None) -> None:
+            log_audio_duration: str | None = None
             with self._lock:
                 job = self._active.get(task_id)
                 if not job:
                     return
+                previous_stage = job.record.stage
                 job.record.stage = stage
                 if audio_duration is not None:
                     job.record.audio_duration = audio_duration
+                    log_audio_duration = audio_duration
+            if stage != previous_stage:
+                logger.info(
+                    "Task %s stage=%s audio_duration=%s",
+                    task_id,
+                    stage,
+                    log_audio_duration or "-",
+                )
 
         return progress
 
