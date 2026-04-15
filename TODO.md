@@ -25,6 +25,7 @@
 - [x] README、architecture、roadmap、doctor 已补齐
 - [x] 基础测试通过：`uv run --extra dev pytest`
 - [x] 在真实 Linux + NVIDIA GPU 环境验证默认链路可用
+- [x] 在真实 Linux + NVIDIA GPU 环境验证备选链 `faster-whisper + pyannote` 可加载并完成真实推理
 - [x] 默认 GPU 依赖已对齐到 CUDA 12.8 兼容的 PyTorch 2.10 系列
 - [x] `3D-Speaker` 默认链运行时依赖已补齐并可加载
 - [x] 主链 smoke test 已通过：`17.19s` wav 同步转写约 `4.03s`
@@ -36,6 +37,9 @@
 - [x] 无有效 ASR 文本的说话人已不再计入 `speakers_info` 和 `total_speakers`
 - [x] `three-guys-record.mp3` 已验证不再出现“整段文本只落到单一说话人”的问题
 - [x] 说话人回填已升级为词级时间戳归属，跨 speaker 边界的尾字头字可拆开重分配
+- [x] `faster-whisper-large-v3` 已下载到 `models/faster-whisper/large-v3`
+- [x] `pyannote-community-1` 已下载到 `models/pyannote/speaker-diarization-community-1`
+- [x] `pyannote` 后端已兼容本地 `config.yaml` 加载、4.x `DiarizeOutput` 返回结构和内存 waveform 输入
 
 ## 当前待推进
 
@@ -51,6 +55,8 @@
 - [ ] 补一份“本轮真机验证纪要”到 `docs/`，沉淀环境和问题修复点
 - [ ] 继续优化 `FunASR + 3D-Speaker` 在多人短句场景下的切句质量，减少“嗯/哦”等极短片段
 - [ ] 继续收敛默认链加载日志，评估是否要压低 `modelscope` / `datasets` 的纯信息级噪声
+- [ ] 收敛 `pyannote.audio` 导入时的 `torchcodec` 警告，决定是补系统 FFmpeg 兼容层还是显式屏蔽无害告警
+- [ ] 梳理 `speakerlab` 与 `pyannote 4.x` 的 `numpy` 依赖冲突，决定是否拆分 extra、拆容器或保留手工补装方案
 - [ ] 继续优化 VAD 与 speaker 边界协同，避免整段会话被并成单个超长 VAD 段
 - [ ] 继续打磨前端细节：补长列表虚拟化与更细的移动端适配
 
@@ -69,7 +75,7 @@
 - [ ] 执行 `docker build -f Dockerfile.gpu -t msr-gpu-runtime:latest .`
 - [ ] 用 `docker run --gpus all --network none` 做完整离线验收
 - [ ] 验证 `FunASR + 3D-Speaker` 默认链路在多任务并发下的吞吐、排队和完成乱序表现
-- [ ] 验证 `faster-whisper + pyannote` 备选链路
+- [x] 验证 `faster-whisper + pyannote` 备选链路
 - [ ] 核对各模型是否仍有隐式联网行为
 - [ ] 验证容器内模型路径、权限、挂载方式
 - [ ] 补一份真实环境依赖版本记录：CUDA、驱动、Docker、Python

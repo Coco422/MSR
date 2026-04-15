@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+import warnings
 
 from msr.backends.diarization.base import DiarizationBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
 from msr.core.types import SpeakerSegment
+from msr.services.audio_io import load_audio
 
 
 class PyannoteBackend(DiarizationBackend):
@@ -17,9 +21,18 @@ class PyannoteBackend(DiarizationBackend):
         load_options = {**self.options, **(options or {})}
         try:
             import torch
-            from pyannote.audio import Pipeline
 
-            pipeline = Pipeline.from_pretrained(str(local_path))
+            _ensure_torchaudio_pyannote_compat()
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"\n?torchcodec is not installed correctly so built-in audio decoding will fail\.",
+                    category=UserWarning,
+                )
+                from pyannote.audio import Pipeline
+
+            checkpoint_path = _resolve_pyannote_checkpoint(local_path)
+            pipeline = Pipeline.from_pretrained(str(checkpoint_path))
             if device.startswith("cuda") and hasattr(pipeline, "to"):
                 pipeline.to(torch.device("cuda"))
 
@@ -47,12 +60,26 @@ class PyannoteBackend(DiarizationBackend):
             diarize_kwargs["max_speakers"] = hints["max_speakers"]
 
         try:
-            annotation = self._pipeline(str(audio_path), **diarize_kwargs)
+            waveform, sample_rate = load_audio(audio_path)
+            annotation = self._pipeline(
+                {
+                    "waveform": self._torch.from_numpy(waveform).unsqueeze(0),
+                    "sample_rate": sample_rate,
+                },
+                **diarize_kwargs,
+            )
         except TypeError:
-            annotation = self._pipeline({"audio": str(audio_path)}, **diarize_kwargs)
+            annotation = self._pipeline(
+                {
+                    "waveform": self._torch.from_numpy(waveform).unsqueeze(0),
+                    "sample_rate": sample_rate,
+                },
+                **diarize_kwargs,
+            )
         except Exception as exc:
             raise TranscriptionError(f"pyannote diarization failed: {exc}") from exc
 
+        annotation = _extract_pyannote_annotation(annotation)
         segments = []
         for segment, _, label in annotation.itertracks(yield_label=True):
             segments.append(
@@ -63,3 +90,55 @@ class PyannoteBackend(DiarizationBackend):
                 )
             )
         return segments
+
+
+@dataclass(slots=True)
+class _AudioMetaDataCompat:
+    sample_rate: int
+    num_frames: int
+    num_channels: int
+    bits_per_sample: int
+    encoding: str
+
+
+def _ensure_torchaudio_pyannote_compat() -> None:
+    import soundfile as sf
+    import torchaudio
+
+    if not hasattr(torchaudio, "AudioMetaData"):
+        torchaudio.AudioMetaData = _AudioMetaDataCompat
+
+    if not hasattr(torchaudio, "list_audio_backends"):
+        torchaudio.list_audio_backends = lambda: ["soundfile"]
+
+    if not hasattr(torchaudio, "info"):
+
+        def _info(file: Any, backend: str | None = None) -> _AudioMetaDataCompat:
+            audio_source = file.get("audio") if isinstance(file, dict) else file
+            metadata = sf.info(str(audio_source))
+            subtype_info = str(metadata.subtype_info or "")
+            bit_depth = "".join(char for char in subtype_info if char.isdigit())
+            return _AudioMetaDataCompat(
+                sample_rate=int(metadata.samplerate),
+                num_frames=int(metadata.frames),
+                num_channels=int(metadata.channels),
+                bits_per_sample=int(bit_depth) if bit_depth else 0,
+                encoding=str(metadata.subtype or metadata.format or "UNKNOWN"),
+            )
+
+        torchaudio.info = _info
+
+
+def _resolve_pyannote_checkpoint(local_path: Path) -> Path:
+    resolved_path = local_path.expanduser().resolve()
+    if resolved_path.is_dir():
+        return resolved_path / "config.yaml"
+    return resolved_path
+
+
+def _extract_pyannote_annotation(result: Any) -> Any:
+    if hasattr(result, "itertracks"):
+        return result
+    if hasattr(result, "speaker_diarization"):
+        return result.speaker_diarization
+    return result

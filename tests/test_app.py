@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
 from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
+from msr.backends.diarization.pyannote_backend import _extract_pyannote_annotation, _resolve_pyannote_checkpoint
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import probe_duration
@@ -188,6 +189,25 @@ def test_console_pages_are_public(tmp_path: Path):
             response = client.get(path)
             assert response.status_code == 200
             assert "text/html" in response.headers["content-type"]
+
+
+def test_resolve_pyannote_checkpoint_prefers_config_yaml(tmp_path: Path):
+    model_dir = tmp_path / "pyannote-model"
+    model_dir.mkdir()
+    config_path = model_dir / "config.yaml"
+
+    assert _resolve_pyannote_checkpoint(model_dir) == config_path.resolve()
+    assert _resolve_pyannote_checkpoint(config_path) == config_path.resolve()
+
+
+def test_extract_pyannote_annotation_supports_diarize_output():
+    annotation = object()
+
+    class DiarizeOutput:
+        speaker_diarization = annotation
+
+    assert _extract_pyannote_annotation(annotation) is annotation
+    assert _extract_pyannote_annotation(DiarizeOutput()) is annotation
 
 
 def test_transcribe_requires_api_key(tmp_path: Path):
