@@ -25,9 +25,15 @@
 cd /path/to/MSR
 cp .env.example .env
 export MSR_API_KEY="$(grep MSR_API_KEY .env | cut -d= -f2-)"
-uv sync --extra dev --extra gpu-runtime
+uv sync --extra dev --extra default-runtime
 uv run python tools/bootstrap_models.py
 uv run python tools/doctor.py
+```
+
+如果要同时验证备选链路 `faster-whisper + pyannote`，再补一轮：
+
+```bash
+uv sync --extra dev --extra gpu-runtime
 ```
 
 ## 3. 本地服务方式

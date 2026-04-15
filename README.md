@@ -48,10 +48,15 @@ MSR 的目标是把旧 demo 重构成一个真正适合长期维护的服务：
 
 ```bash
 cd /Users/ray/Private/MCKJ-proj/MSR
-uv sync --extra dev --extra gpu-runtime
+uv sync --extra dev --extra default-runtime
 export MSR_API_KEY="change-this"
 uv run msr-api
 ```
+
+说明：
+
+- `default-runtime`：默认主链 `FunASR + 3D-Speaker + WebRTC VAD`
+- `gpu-runtime`：包含默认链路和备选链路 `faster-whisper + pyannote`
 
 默认访问：
 

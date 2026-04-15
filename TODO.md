@@ -35,7 +35,7 @@
 
 - [ ] 准备真实模型目录到 `models/`
 - [ ] 按 `config/models.toml` 对齐模型实际路径
-- [ ] 在 x86 Linux + NVIDIA GPU 环境执行 `uv sync --extra gpu-runtime`
+- [ ] 在 x86 Linux + NVIDIA GPU 环境执行 `uv sync --extra dev --extra default-runtime`
 - [ ] 执行 `docker build -f Dockerfile.gpu -t msr-gpu-runtime:latest .`
 - [ ] 用 `docker run --gpus all --network none` 启动服务
 - [ ] 调用管理接口加载默认模型
@@ -54,6 +54,7 @@
 
 - [ ] 根据真实 GPU 环境决定是否固定 Python 3.11
 - [ ] 根据真实模型准备方式决定是否保留 `gpu-runtime` 全量 extra
+- [x] 增加 `default-runtime` extra，避免默认链路首次部署就安装全量备选后端
 - [ ] 确认是否需要拆 `Dockerfile.gpu` 和 `Dockerfile.gpu.slim`
 - [ ] 评估 `/transcribe/` 是否要补 `speaker_count_hint` 等可选参数
 - [ ] 设计 speaker registry：保存说话人声纹特征并支持跨音频识别同一人
