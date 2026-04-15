@@ -32,6 +32,7 @@
 - [x] `3D-Speaker` 默认链运行时依赖已补齐并可加载
 - [x] 主链 smoke test 已通过：`17.19s` wav 同步转写约 `4.03s`
 - [x] 管理接口已在真机验证：`runtime/active`、`runtime/tasks`、`system/resources`
+- [x] 用户侧准确率体验反馈：`faster-whisper` 当前优于 `paraformer`
 - [x] 修复 `FunASR` 词级时间戳毫秒/秒解析错误，避免出现 `9:30 -> 0:30` 这类错时间
 - [x] 修复 `FunASR` 词级时间戳整段合并问题，当前可按停顿切成多个文本片段
 - [x] 默认禁用 `FunASR` 更新检查，避免离线场景下出现版本探测日志和潜在外网依赖
@@ -42,6 +43,7 @@
 - [x] `faster-whisper-large-v3` 已下载到 `models/faster-whisper/large-v3`
 - [x] `pyannote-community-1` 已下载到 `models/pyannote/speaker-diarization-community-1`
 - [x] `pyannote` 后端已兼容本地 `config.yaml` 加载、4.x `DiarizeOutput` 返回结构和内存 waveform 输入
+- [x] 已提供双 venv 切换脚本：默认链环境 / `faster-whisper + pyannote` 环境
 
 ## 当前待推进
 
@@ -52,6 +54,7 @@
 - [x] 在 README 中加入“明天 Linux 验收步骤”入口
 - [x] 准备一个最小示例音频 `samples/` 目录结构说明
 - [ ] 在真实 GPU 环境验证默认链路的吞吐、显存峰值和排队表现
+- [ ] 基于真实准确率表现，评估是否把 `faster-whisper + pyannote` 提升为 accuracy-first 推荐链，甚至替换当前默认链
 - [ ] 评估是否需要把当前任务摘要导出到日志或 metrics 系统
 - [ ] 记录默认链在真实 GPU 环境下的显存峰值，而不只是加载后常驻占用
 - [ ] 补一份“本轮真机验证纪要”到 `docs/`，沉淀环境和问题修复点

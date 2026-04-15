@@ -64,6 +64,7 @@ uv run msr-api
 
 - `default-runtime`：默认主链 `FunASR + 3D-Speaker + WebRTC VAD`
 - `gpu-runtime`：包含默认链路和备选链路 `faster-whisper + pyannote`
+- 当前测试倾向：若优先识别准确率，`faster-whisper` 比 `paraformer` 更稳，建议作为 accuracy-first 方案优先评估
 - Linux + NVIDIA 环境默认锁定 `torch 2.10 / torchaudio 2.10 / torchvision 0.25`，避免 CUDA 12.8 驱动误拉到 `cu130`
 - `pyannote-community-1` 备选链要求 `pyannote.audio 4.x`
 - 当前真实验证采用 `uv sync --extra dev --extra default-runtime` 后，再用 `uv pip install --python .venv/bin/python 'faster-whisper>=1.1.0' 'pyannote.audio>=4,<5'` 补齐备选链
@@ -79,6 +80,29 @@ uv run msr-api
 
 Linux + NVIDIA GPU 验收步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
 示例音频目录结构说明见 [samples/README.md](samples/README.md)。
+
+### 独立 venv 切换脚本
+
+如果你希望把 `speakerlab` 默认链和 `pyannote` 准确率优先链彻底隔离，可直接使用：
+
+```bash
+bash tools/runtime_env.sh setup default
+bash tools/runtime_env.sh setup pyannote
+```
+
+说明：
+
+- `default` 环境对应 `FunASR + 3D-Speaker + WebRTC VAD`
+- `pyannote` 环境对应 `faster-whisper + pyannote`
+- 之所以拆两个 venv，是因为 `speakerlab` 与 `pyannote 4.x` 存在上游依赖冲突
+
+常用命令：
+
+```bash
+bash tools/runtime_env.sh run default
+bash tools/runtime_env.sh run pyannote
+bash tools/runtime_env.sh exec pyannote python tools/doctor.py --include-alternates
+```
 
 ### 先注册模型，再显式加载
 
