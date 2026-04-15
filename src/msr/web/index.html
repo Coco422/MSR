@@ -12,7 +12,7 @@
         <div>
           <p class="eyebrow">MSR</p>
           <h1>Multi Speaker Recognization Console</h1>
-          <p class="subtitle">离线优先的模型管理、资源监控与多说话人转写控制台。</p>
+          <p class="subtitle">面向管理人员与联调阶段的微服务控制台，用于模型管理、资源监控、运行控制与接口示例调用。</p>
         </div>
         <div class="hero-card">
           <label for="apiKey">API Key</label>
@@ -23,6 +23,16 @@
       </header>
 
       <section class="panel-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>管理说明</h2>
+          </div>
+          <div class="notice">
+            <p>GUI 仅用于管理接口示例、模型加载控制和前期资源观察，不是终端客户页面。</p>
+            <p>对上游仍以 API 为主，当前页面重点展示运行状态、并发上限、排队情况和同步转写示例。</p>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="panel-header">
             <h2>当前激活模型</h2>
@@ -37,6 +47,36 @@
             <button id="refreshResourcesButton" class="ghost">刷新</button>
           </div>
           <pre id="resourceState" class="code-block">Loading...</pre>
+        </section>
+      </section>
+
+      <section class="panel-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>运行控制</h2>
+            <button id="refreshLimitsButton" class="ghost">刷新</button>
+          </div>
+          <form id="runtimeLimitsForm" class="limit-form">
+            <label for="maxParallelInput">最大并行处理量</label>
+            <input id="maxParallelInput" type="number" min="1" step="1" />
+
+            <label for="maxQueuedInput">最大排队量</label>
+            <input id="maxQueuedInput" type="number" min="0" step="1" />
+
+            <label for="recentTaskLimitInput">最近任务保留数</label>
+            <input id="recentTaskLimitInput" type="number" min="1" step="1" />
+
+            <button type="submit">保存运行控制</button>
+          </form>
+          <pre id="runtimeLimitsState" class="code-block">Loading...</pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>任务观察</h2>
+            <button id="refreshTasksButton" class="ghost">刷新</button>
+          </div>
+          <pre id="taskState" class="code-block">Loading...</pre>
         </section>
       </section>
 

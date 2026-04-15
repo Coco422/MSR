@@ -54,6 +54,30 @@ async function refreshResources() {
   }
 }
 
+async function refreshTasks() {
+  const target = document.getElementById("taskState");
+  try {
+    const response = await apiFetch("/api/v1/runtime/tasks");
+    target.textContent = pretty(await response.json());
+  } catch (error) {
+    target.textContent = `Failed to load task state: ${error.message}`;
+  }
+}
+
+async function refreshLimits() {
+  const target = document.getElementById("runtimeLimitsState");
+  try {
+    const response = await apiFetch("/api/v1/runtime/limits");
+    const payload = await response.json();
+    document.getElementById("maxParallelInput").value = payload.max_parallel_tasks;
+    document.getElementById("maxQueuedInput").value = payload.max_queued_tasks;
+    document.getElementById("recentTaskLimitInput").value = payload.recent_task_limit;
+    target.textContent = pretty(payload);
+  } catch (error) {
+    target.textContent = `Failed to load runtime limits: ${error.message}`;
+  }
+}
+
 async function refreshModels() {
   const container = document.getElementById("modelsTable");
   try {
@@ -135,6 +159,36 @@ function bindModelButtons() {
   });
 }
 
+async function handleRuntimeLimits(event) {
+  event.preventDefault();
+  const target = document.getElementById("runtimeLimitsState");
+  const payload = {
+    max_parallel_tasks: Number(document.getElementById("maxParallelInput").value),
+    max_queued_tasks: Number(document.getElementById("maxQueuedInput").value),
+    recent_task_limit: Number(document.getElementById("recentTaskLimitInput").value),
+  };
+
+  target.textContent = "保存中...";
+
+  try {
+    const response = await apiFetch("/api/v1/runtime/limits", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(pretty(data));
+    }
+    target.textContent = pretty(data);
+    await refreshTasks();
+  } catch (error) {
+    target.textContent = `保存运行控制失败: ${error.message}`;
+  }
+}
+
 async function handleTranscribe(event) {
   event.preventDefault();
   const result = document.getElementById("transcribeResult");
@@ -156,8 +210,10 @@ async function handleTranscribe(event) {
       throw new Error(pretty(payload));
     }
     result.textContent = pretty(payload);
+    await refreshTasks();
   } catch (error) {
     result.textContent = `转写失败: ${error.message}`;
+    await refreshTasks();
   }
 }
 
@@ -168,19 +224,25 @@ function bootstrap() {
   document.getElementById("saveKeyButton").addEventListener("click", async () => {
     setApiKey(keyInput.value.trim());
     await refreshAuth();
-    await Promise.all([refreshModels(), refreshRuntime(), refreshResources()]);
+    await Promise.all([refreshModels(), refreshRuntime(), refreshResources(), refreshLimits(), refreshTasks()]);
   });
 
   document.getElementById("refreshModelsButton").addEventListener("click", refreshModels);
   document.getElementById("refreshRuntimeButton").addEventListener("click", refreshRuntime);
   document.getElementById("refreshResourcesButton").addEventListener("click", refreshResources);
+  document.getElementById("refreshLimitsButton").addEventListener("click", refreshLimits);
+  document.getElementById("refreshTasksButton").addEventListener("click", refreshTasks);
+  document.getElementById("runtimeLimitsForm").addEventListener("submit", handleRuntimeLimits);
   document.getElementById("transcribeForm").addEventListener("submit", handleTranscribe);
 
   refreshAuth();
   refreshModels();
   refreshRuntime();
   refreshResources();
+  refreshLimits();
+  refreshTasks();
   setInterval(refreshResources, 3000);
+  setInterval(refreshTasks, 3000);
 }
 
 bootstrap();

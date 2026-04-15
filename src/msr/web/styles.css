@@ -101,6 +101,7 @@ button {
 }
 
 input[type="password"],
+input[type="number"],
 input[type="file"] {
   width: 100%;
   border: 1px solid var(--line);
@@ -170,6 +171,32 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.limit-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.limit-form label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.notice {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(214, 234, 223, 0.85), rgba(255, 255, 255, 0.95));
+  padding: 16px;
+}
+
+.notice p {
+  margin: 0 0 8px;
+}
+
+.notice p:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 900px) {
