@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import re
 import shutil
 from pathlib import Path
 from tempfile import mkdtemp
@@ -14,12 +15,15 @@ from fastapi import UploadFile
 from msr.backends.vad.webrtc_backend import WebRTCVADBackend
 from msr.core.config import Settings
 from msr.core.errors import InvalidAudioError
-from msr.core.types import SpeakerSegment, TextSegment
+from msr.core.types import SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import load_audio, write_clip
 from msr.services.model_manager import ModelManager
 
 
 ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
+TOKEN_GROUP_PAUSE_SECONDS = 0.4
+CJK_RANGES = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+CHINESE_PUNCTUATION = "，。！？；：、“”‘’（）《》〈〉【】—…·"
 StageCallback = Callable[[str, str | None], None]
 
 
@@ -146,17 +150,104 @@ class TranscriptionService:
 
 
 def _match_text_to_speakers(text_segments: list[TextSegment], speaker_segments: list[SpeakerSegment]) -> dict[str, list[TextSegment]]:
+    ordered_speakers = sorted(
+        speaker_segments,
+        key=lambda segment: (segment.start, segment.end, _speaker_sort_key(segment.speaker_id)),
+    )
     grouped: dict[str, list[TextSegment]] = defaultdict(list)
     for segment in text_segments:
-        best_speaker = "0"
-        best_overlap = 0.0
-        for speaker_segment in speaker_segments:
-            overlap = min(segment.end, speaker_segment.end) - max(segment.start, speaker_segment.start)
-            if overlap > best_overlap:
-                best_overlap = overlap
-                best_speaker = speaker_segment.speaker_id
-        grouped[best_speaker].append(segment)
+        for speaker_id, matched_segment in _split_text_segment_by_speaker(segment, ordered_speakers):
+            grouped[speaker_id].append(matched_segment)
+
+    for segments in grouped.values():
+        segments.sort(key=lambda item: (item.start, item.end))
     return grouped
+
+
+def _split_text_segment_by_speaker(
+    segment: TextSegment,
+    speaker_segments: list[SpeakerSegment],
+) -> list[tuple[str, TextSegment]]:
+    if not segment.tokens:
+        return [(_best_speaker_for_span(segment.start, segment.end, speaker_segments), segment)]
+
+    items: list[tuple[str, TextSegment]] = []
+    current_speaker: str | None = None
+    current_tokens: list[TimedToken] = []
+
+    for token in segment.tokens:
+        speaker_id = _best_speaker_for_span(token.start, token.end, speaker_segments)
+        if current_tokens and (
+            speaker_id != current_speaker or token.start - current_tokens[-1].end >= TOKEN_GROUP_PAUSE_SECONDS
+        ):
+            token_segment = _build_token_text_segment(current_tokens, segment.confidence)
+            if token_segment and current_speaker is not None:
+                items.append((current_speaker, token_segment))
+            current_tokens = []
+
+        if not current_tokens:
+            current_speaker = speaker_id
+        current_tokens.append(token)
+
+    token_segment = _build_token_text_segment(current_tokens, segment.confidence)
+    if token_segment and current_speaker is not None:
+        items.append((current_speaker, token_segment))
+
+    if items:
+        return items
+    return [(_best_speaker_for_span(segment.start, segment.end, speaker_segments), segment)]
+
+
+def _best_speaker_for_span(start: float, end: float, speaker_segments: list[SpeakerSegment]) -> str:
+    if not speaker_segments:
+        return "0"
+
+    midpoint = (start + end) / 2
+    best_speaker = "0"
+    best_overlap = -1.0
+    best_distance = float("inf")
+    best_sort_key = _speaker_sort_key(best_speaker)
+
+    for speaker_segment in speaker_segments:
+        overlap = max(0.0, min(end, speaker_segment.end) - max(start, speaker_segment.start))
+        distance = _distance_to_segment(midpoint, speaker_segment)
+        sort_key = _speaker_sort_key(speaker_segment.speaker_id)
+        if overlap > best_overlap + 1e-9:
+            best_speaker = speaker_segment.speaker_id
+            best_overlap = overlap
+            best_distance = distance
+            best_sort_key = sort_key
+            continue
+        if abs(overlap - best_overlap) <= 1e-9 and (distance, sort_key) < (best_distance, best_sort_key):
+            best_speaker = speaker_segment.speaker_id
+            best_distance = distance
+            best_sort_key = sort_key
+
+    return best_speaker
+
+
+def _distance_to_segment(point: float, speaker_segment: SpeakerSegment) -> float:
+    if speaker_segment.start <= point <= speaker_segment.end:
+        return 0.0
+    if point < speaker_segment.start:
+        return speaker_segment.start - point
+    return point - speaker_segment.end
+
+
+def _build_token_text_segment(tokens: list[TimedToken], confidence: float) -> TextSegment | None:
+    if not tokens:
+        return None
+
+    start = tokens[0].start
+    end = tokens[-1].end
+    if end <= start:
+        return None
+
+    text = _normalize_text(" ".join(token.text for token in tokens))
+    if not text:
+        return None
+
+    return TextSegment(start=start, end=end, text=text, confidence=confidence, tokens=tuple(tokens))
 
 
 def _build_transcripts(
@@ -254,6 +345,17 @@ def _speaker_label(index: int) -> str:
     if index < 26:
         return f"说话人 {chr(65 + index)}"
     return f"说话人 {index + 1}"
+
+
+def _normalize_text(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
+        return ""
+
+    normalized = re.sub(fr"(?<=[{CJK_RANGES}])\s+(?=[{CJK_RANGES}])", "", normalized)
+    normalized = re.sub(fr"\s+(?=[{CHINESE_PUNCTUATION}])", "", normalized)
+    normalized = re.sub(fr"(?<=[{CHINESE_PUNCTUATION}])\s+", "", normalized)
+    return normalized
 
 
 def format_time(seconds: float) -> str:

@@ -13,10 +13,15 @@ from fastapi.testclient import TestClient
 from msr.app.main import create_app
 from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
-from msr.core.types import SpeakerSegment, TextSegment
+from msr.core.types import SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import probe_duration
 from msr.services.model_manager import ASR_FACTORIES, DIARIZATION_FACTORIES
-from msr.services.transcription_service import _build_speaker_presentations, _build_speakers_info, _build_transcripts
+from msr.services.transcription_service import (
+    _build_speaker_presentations,
+    _build_speakers_info,
+    _build_transcripts,
+    _match_text_to_speakers,
+)
 
 
 class FakeASRBackend:
@@ -454,6 +459,41 @@ def test_funasr_timestamp_parser_splits_segments_and_converts_milliseconds(tmp_p
         ("你好啊", 0.1, 0.52),
         ("我来了", 1.2, 1.7),
     ]
+    assert [token.text for token in segments[0].tokens] == ["你", "好", "啊"]
+    assert [token.text for token in segments[1].tokens] == ["我", "来", "了"]
+
+
+def test_match_text_to_speakers_splits_token_runs_on_speaker_boundaries():
+    speaker_segments = [
+        SpeakerSegment(speaker_id="1", start=12.03, end=13.90),
+        SpeakerSegment(speaker_id="4", start=13.90, end=17.79),
+    ]
+    text_segments = [
+        TextSegment(
+            start=12.13,
+            end=14.45,
+            text="然后我还想吃汉堡包辣辣辣",
+            tokens=(
+                TimedToken(text="然", start=12.13, end=12.35),
+                TimedToken(text="后", start=12.35, end=12.53),
+                TimedToken(text="我", start=12.53, end=12.65),
+                TimedToken(text="还", start=12.65, end=12.79),
+                TimedToken(text="想", start=12.79, end=13.01),
+                TimedToken(text="吃", start=13.01, end=13.21),
+                TimedToken(text="汉", start=13.21, end=13.37),
+                TimedToken(text="堡", start=13.37, end=13.57),
+                TimedToken(text="包", start=13.57, end=13.81),
+                TimedToken(text="辣", start=13.89, end=14.03),
+                TimedToken(text="辣", start=14.03, end=14.21),
+                TimedToken(text="辣", start=14.21, end=14.45),
+            ),
+        )
+    ]
+
+    speaker_texts = _match_text_to_speakers(text_segments, speaker_segments)
+
+    assert [segment.text for segment in speaker_texts["1"]] == ["然后我还想吃汉堡包"]
+    assert [segment.text for segment in speaker_texts["4"]] == ["辣辣辣"]
 
 
 def test_funasr_load_disables_update_check_by_default(monkeypatch, tmp_path: Path):

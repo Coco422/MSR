@@ -5,11 +5,20 @@ from pathlib import Path
 
 
 @dataclass(slots=True)
+class TimedToken:
+    text: str
+    start: float
+    end: float
+    confidence: float = 1.0
+
+
+@dataclass(slots=True)
 class TextSegment:
     start: float
     end: float
     text: str
     confidence: float = 1.0
+    tokens: tuple[TimedToken, ...] = ()
 
 
 @dataclass(slots=True)

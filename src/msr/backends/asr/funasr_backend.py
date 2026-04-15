@@ -6,7 +6,7 @@ from typing import Any
 
 from msr.backends.asr.base import ASRBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
-from msr.core.types import TextSegment
+from msr.core.types import TextSegment, TimedToken
 from msr.services.audio_io import probe_duration
 
 _FUNASR_PAUSE_SPLIT_SECONDS = 0.4
@@ -146,47 +146,45 @@ def _parse_timestamp_segments(raw_text: str, timestamp: list[Any], audio_duratio
         return [TextSegment(start=start, end=end, text=text)]
 
     segments: list[TextSegment] = []
-    current_tokens: list[str] = []
-    current_start = 0.0
-    current_end = 0.0
+    current_tokens: list[TimedToken] = []
 
-    for token, (start_raw, end_raw) in zip(tokens, pairs):
+    for token_text, (start_raw, end_raw) in zip(tokens, pairs):
         start = _timestamp_to_seconds(start_raw, scale)
         end = _timestamp_to_seconds(end_raw, scale)
         if end <= start:
             continue
+        token = TimedToken(text=token_text, start=start, end=end)
 
         if not current_tokens:
             current_tokens = [token]
-            current_start = start
-            current_end = end
             continue
 
-        gap = max(0.0, start - current_end)
-        duration = current_end - current_start
+        gap = max(0.0, start - current_tokens[-1].end)
+        duration = current_tokens[-1].end - current_tokens[0].start
         if gap >= _FUNASR_PAUSE_SPLIT_SECONDS or duration >= _FUNASR_MAX_SEGMENT_SECONDS:
-            segment = _build_text_segment(current_tokens, current_start, current_end)
+            segment = _build_text_segment(current_tokens)
             if segment:
                 segments.append(segment)
             current_tokens = [token]
-            current_start = start
-            current_end = end
             continue
 
         current_tokens.append(token)
-        current_end = end
 
-    segment = _build_text_segment(current_tokens, current_start, current_end)
+    segment = _build_text_segment(current_tokens)
     if segment:
         segments.append(segment)
     return segments
 
 
-def _build_text_segment(tokens: list[str], start: float, end: float) -> TextSegment | None:
-    text = _normalize_text(" ".join(tokens))
+def _build_text_segment(tokens: list[TimedToken]) -> TextSegment | None:
+    if not tokens:
+        return None
+    start = tokens[0].start
+    end = tokens[-1].end
+    text = _normalize_text(" ".join(token.text for token in tokens))
     if not text or end <= start:
         return None
-    return TextSegment(start=start, end=end, text=text)
+    return TextSegment(start=start, end=end, text=text, tokens=tuple(tokens))
 
 
 def _timestamp_pairs(timestamp: list[Any]) -> list[tuple[Any, Any]]:
