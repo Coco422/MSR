@@ -1,6 +1,8 @@
 AIMeeting-Docker/
 .env
 .venv/
+.venv.default/
+.venv.pyannote/
 __pycache__/
 .pytest_cache/
 tmp/
@@ -13,3 +15,4 @@ models/*
 *.wav
 .github/
 *.mp3
+*.m4a
