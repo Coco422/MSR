@@ -16,3 +16,9 @@ api_key_header = "X-API-Key"
 [web]
 title = "MSR Console"
 resource_refresh_seconds = 3
+
+[runtime]
+max_parallel_tasks = 1
+max_queued_tasks = 2
+recent_task_limit = 20
+data_dir = "data"

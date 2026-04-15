@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TranscriptionResult(BaseModel):
@@ -49,3 +49,42 @@ class AuthCheckResponse(BaseModel):
 class RuntimeStateResponse(BaseModel):
     asr: dict | None
     diarization: dict | None
+
+
+class RuntimeTaskRecord(BaseModel):
+    task_id: str
+    status: str
+    stage: str
+    submitted_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    queue_wait_ms: int | None = None
+    run_ms: int | None = None
+    filename: str
+    audio_duration: str | None = None
+    error: str | None = None
+
+
+class RuntimeTaskCounts(BaseModel):
+    active: int
+    queued: int
+    recent: int
+
+
+class RuntimeTasksResponse(BaseModel):
+    counts: RuntimeTaskCounts
+    active: list[RuntimeTaskRecord]
+    queued: list[RuntimeTaskRecord]
+    recent: list[RuntimeTaskRecord]
+
+
+class RuntimeLimitsResponse(BaseModel):
+    max_parallel_tasks: int
+    max_queued_tasks: int
+    recent_task_limit: int
+
+
+class RuntimeLimitsUpdateRequest(BaseModel):
+    max_parallel_tasks: int | None = Field(default=None, ge=1)
+    max_queued_tasks: int | None = Field(default=None, ge=0)
+    recent_task_limit: int | None = Field(default=None, ge=1)

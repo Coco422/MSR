@@ -46,6 +46,22 @@ class WebConfig:
 
 
 @dataclass(slots=True)
+class RuntimeConfig:
+    max_parallel_tasks: int = 1
+    max_queued_tasks: int = 2
+    recent_task_limit: int = 20
+    data_dir: Path = Path("data")
+
+    @property
+    def override_path(self) -> Path:
+        return self.data_dir / "runtime_overrides.toml"
+
+    @property
+    def recent_tasks_path(self) -> Path:
+        return self.data_dir / "recent_tasks.json"
+
+
+@dataclass(slots=True)
 class ModelConfig:
     id: str
     kind: str
@@ -63,6 +79,7 @@ class Settings:
     app: AppConfig
     security: SecurityConfig
     web: WebConfig
+    runtime: RuntimeConfig
     models: list[ModelConfig]
 
     @property
@@ -87,10 +104,18 @@ def load_settings(project_root: Path | None = None) -> Settings:
     app_section = app_raw.get("app", {})
     security_section = app_raw.get("security", {})
     web_section = app_raw.get("web", {})
+    runtime_section = dict(app_raw.get("runtime", {}))
 
     temp_dir = Path(app_section.get("temp_dir", "tmp"))
     if not temp_dir.is_absolute():
         temp_dir = root / temp_dir
+
+    data_dir = Path(runtime_section.get("data_dir", "data"))
+    if not data_dir.is_absolute():
+        data_dir = root / data_dir
+
+    runtime_override = _load_toml(data_dir / "runtime_overrides.toml").get("runtime", {})
+    runtime_section.update(runtime_override)
 
     api_key = os.getenv("MSR_API_KEY", security_section.get("api_key", ""))
     if not api_key:
@@ -135,5 +160,22 @@ def load_settings(project_root: Path | None = None) -> Settings:
             title=web_section.get("title", "MSR Console"),
             resource_refresh_seconds=int(web_section.get("resource_refresh_seconds", 3)),
         ),
+        runtime=RuntimeConfig(
+            max_parallel_tasks=_read_int(runtime_section, "max_parallel_tasks", 1, minimum=1),
+            max_queued_tasks=_read_int(runtime_section, "max_queued_tasks", 2, minimum=0),
+            recent_task_limit=_read_int(runtime_section, "recent_task_limit", 20, minimum=1),
+            data_dir=data_dir,
+        ),
         models=models,
     )
+
+
+def _read_int(section: dict[str, Any], key: str, default: int, minimum: int) -> int:
+    raw = section.get(key, default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"Invalid integer for runtime.{key}: {raw}") from exc
+    if value < minimum:
+        raise ConfigurationError(f"runtime.{key} must be >= {minimum}, got {value}")
+    return value

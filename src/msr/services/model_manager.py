@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Callable
 
 from msr.backends.asr.base import ASRBackend
 from msr.backends.asr.faster_whisper_backend import FasterWhisperBackend
@@ -38,6 +38,7 @@ class ModelManager:
         self.settings = settings
         self._lock = RLock()
         self._active_tasks = 0
+        self._inflight_tasks_provider: Callable[[], int] | None = None
         self._registry = self._build_registry(settings.models)
         self._loaded: dict[str, LoadedModel | None] = {
             "asr": None,
@@ -100,10 +101,18 @@ class ModelManager:
                 for kind, loaded in self._loaded.items()
             }
 
+    def bind_inflight_tasks_provider(self, provider: Callable[[], int]) -> None:
+        self._inflight_tasks_provider = provider
+
+    def ensure_transcription_ready(self) -> None:
+        with self._lock:
+            if not self._loaded["asr"] or not self._loaded["diarization"]:
+                raise ModelNotLoadedError("Both ASR and diarization models must be loaded before transcription.")
+
     def load(self, kind: str, model_id: str) -> dict[str, Any]:
         with self._lock:
-            if self._active_tasks:
-                raise ModelBusyError("Cannot load models while transcription is running.")
+            if self._busy_task_count():
+                raise ModelBusyError("Cannot load models while transcription tasks are active or queued.")
             config = self._get_model(kind, model_id)
 
             current = self._loaded.get(kind)
@@ -121,8 +130,8 @@ class ModelManager:
 
     def unload(self, kind: str, model_id: str) -> None:
         with self._lock:
-            if self._active_tasks:
-                raise ModelBusyError("Cannot unload models while transcription is running.")
+            if self._busy_task_count():
+                raise ModelBusyError("Cannot unload models while transcription tasks are active or queued.")
             loaded = self._loaded.get(kind)
             if not loaded or loaded.config.id != model_id:
                 raise ModelNotLoadedError(f"Model {model_id} is not currently loaded for kind {kind}.")
@@ -157,3 +166,7 @@ class ModelManager:
         if not factory:
             raise ModelNotFoundError(f"Unsupported backend: {config.backend}")
         return factory(model_id=config.id, options=config.options)
+
+    def _busy_task_count(self) -> int:
+        provider_count = self._inflight_tasks_provider() if self._inflight_tasks_provider else 0
+        return max(self._active_tasks, provider_count)

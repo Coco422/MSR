@@ -28,3 +28,11 @@ class InvalidAudioError(MSRError):
 
 class TranscriptionError(MSRError):
     """Raised when transcription fails."""
+
+
+class QueueFullError(MSRError):
+    """Raised when the runtime queue cannot accept more work."""
+
+    def __init__(self, detail: dict):
+        super().__init__(detail.get("message", "Task queue is full."))
+        self.detail = detail

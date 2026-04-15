@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import time
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from msr.api.deps import get_container
 from msr.api.schemas import AnalysisResponse
-from msr.core.errors import InvalidAudioError, ModelNotLoadedError, TranscriptionError
+from msr.core.errors import InvalidAudioError, ModelNotLoadedError, QueueFullError, TranscriptionError
 from msr.core.security import require_api_key
 
 
@@ -19,19 +17,23 @@ async def transcribe_audio(
     _: str = Depends(require_api_key),
     container=Depends(get_container),
 ):
-    started_at = time.time()
+    prepared = None
     try:
-        result = await container.transcription_service.transcribe_upload(audio)
-        elapsed = time.time() - started_at
-        audio_duration = _duration_to_seconds(result["audio_duration"])
-        speed = audio_duration / elapsed if elapsed > 0 else 0.0
-        result["processing_time"] = _format_duration(elapsed)
-        result["processing_speed"] = f"{speed:.2f}x"
-        return result
+        container.model_manager.ensure_transcription_ready()
+        prepared = await container.transcription_service.prepare_upload(audio)
+        return await container.task_manager.submit(
+            task_id=prepared.task_id,
+            filename=prepared.original_filename,
+            runner=lambda progress: _run_transcription(container, prepared, progress),
+        )
     except InvalidAudioError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ModelNotLoadedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except QueueFullError as exc:
+        if prepared:
+            container.transcription_service.cleanup_prepared_upload(prepared)
+        raise HTTPException(status_code=503, detail=exc.detail) from exc
     except TranscriptionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -45,20 +47,8 @@ async def health_check(container=Depends(get_container)):
     }
 
 
-def _duration_to_seconds(value: str) -> int:
-    parts = [int(part) for part in value.split(":")]
-    if len(parts) == 2:
-        return parts[0] * 60 + parts[1]
-    if len(parts) == 3:
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    return 0
-
-
-def _format_duration(seconds: float) -> str:
-    rounded = max(0, int(round(seconds)))
-    hours = rounded // 3600
-    minutes = (rounded % 3600) // 60
-    secs = rounded % 60
-    if hours:
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-    return f"{minutes}:{secs:02d}"
+def _run_transcription(container, prepared, progress):
+    try:
+        return container.transcription_service.transcribe_prepared(prepared, progress_callback=progress)
+    finally:
+        container.transcription_service.cleanup_prepared_upload(prepared)

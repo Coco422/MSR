@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import threading
+import time
 
 import numpy as np
 import soundfile as sf
 from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
-from msr.core.config import AppConfig, ModelConfig, SecurityConfig, Settings, WebConfig
+from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment
+from msr.services.audio_io import probe_duration
 from msr.services.model_manager import ASR_FACTORIES, DIARIZATION_FACTORIES
 
 
@@ -26,7 +29,11 @@ class FakeASRBackend:
         self.loaded = False
 
     def transcribe(self, audio_path: Path, language: str, timestamps: bool = True) -> list[TextSegment]:
-        return [TextSegment(start=0.0, end=1.0, text="测试文本")]
+        duration = max(probe_duration(audio_path), 0.1)
+        delay = float(self.options.get("sleep_per_second", 0.0)) * duration
+        if delay > 0:
+            time.sleep(delay)
+        return [TextSegment(start=0.0, end=duration, text="测试文本")]
 
 
 class FakeDiarizationBackend:
@@ -42,10 +49,18 @@ class FakeDiarizationBackend:
         self.loaded = False
 
     def diarize(self, audio_path: Path, speaker_hints: dict | None = None) -> list[SpeakerSegment]:
-        return [SpeakerSegment(speaker_id="0", start=0.0, end=1.0)]
+        duration = max(probe_duration(audio_path), 1.0)
+        return [SpeakerSegment(speaker_id="0", start=0.0, end=duration)]
 
 
-def build_settings(tmp_path: Path) -> Settings:
+def build_settings(
+    tmp_path: Path,
+    *,
+    max_parallel_tasks: int = 1,
+    max_queued_tasks: int = 2,
+    recent_task_limit: int = 20,
+    asr_options: dict | None = None,
+) -> Settings:
     asr_dir = tmp_path / "asr"
     diar_dir = tmp_path / "diar"
     asr_dir.mkdir()
@@ -66,12 +81,19 @@ def build_settings(tmp_path: Path) -> Settings:
         ),
         security=SecurityConfig(api_key="test-key", api_key_header="X-API-Key"),
         web=WebConfig(title="MSR Console", resource_refresh_seconds=3),
+        runtime=RuntimeConfig(
+            max_parallel_tasks=max_parallel_tasks,
+            max_queued_tasks=max_queued_tasks,
+            recent_task_limit=recent_task_limit,
+            data_dir=tmp_path / "data",
+        ),
         models=[
             ModelConfig(
                 id="funasr-paraformer-zh",
                 kind="asr",
                 backend="funasr",
                 local_path=asr_dir,
+                options=dict(asr_options or {}),
             ),
             ModelConfig(
                 id="3dspeaker-default",
@@ -83,55 +105,323 @@ def build_settings(tmp_path: Path) -> Settings:
     )
 
 
-def build_client(tmp_path: Path) -> TestClient:
+def build_client(tmp_path: Path, **kwargs) -> TestClient:
     ASR_FACTORIES["funasr"] = FakeASRBackend
     DIARIZATION_FACTORIES["3d_speaker"] = FakeDiarizationBackend
-    app = create_app(settings=build_settings(tmp_path))
+    app = create_app(settings=build_settings(tmp_path, **kwargs))
     return TestClient(app)
 
 
-def make_audio_bytes() -> bytes:
+def make_audio_bytes(seconds: float = 1.0, speech: bool = True) -> bytes:
     sample_rate = 16000
-    seconds = 1.0
     timeline = np.linspace(0, seconds, int(sample_rate * seconds), endpoint=False)
-    audio = 0.1 * np.sin(2 * np.pi * 220 * timeline)
+    if speech:
+        audio = 0.1 * np.sin(2 * np.pi * 220 * timeline)
+    else:
+        audio = np.zeros_like(timeline)
     buffer = BytesIO()
     sf.write(buffer, audio, sample_rate, format="WAV")
     buffer.seek(0)
     return buffer.read()
 
 
-def test_health_is_public(tmp_path: Path):
-    client = build_client(tmp_path)
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
-
-
-def test_transcribe_requires_api_key(tmp_path: Path):
-    client = build_client(tmp_path)
-    response = client.post("/transcribe/")
-    assert response.status_code == 401
-
-
-def test_model_load_and_transcribe_flow(tmp_path: Path):
-    client = build_client(tmp_path)
-    headers = {"X-API-Key": "test-key"}
-
+def load_models(client: TestClient, headers: dict[str, str]) -> None:
     load_asr = client.post("/api/v1/models/asr/funasr-paraformer-zh/load", headers=headers)
     load_diar = client.post("/api/v1/models/diarization/3dspeaker-default/load", headers=headers)
     assert load_asr.status_code == 200
     assert load_diar.status_code == 200
 
-    audio_bytes = make_audio_bytes()
+
+def wait_for_counts(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    active: int | None = None,
+    queued: int | None = None,
+    timeout: float = 3.0,
+) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        response = client.get("/api/v1/runtime/tasks", headers=headers)
+        payload = response.json()
+        counts = payload["counts"]
+        if (active is None or counts["active"] == active) and (queued is None or counts["queued"] == queued):
+            return payload
+        time.sleep(0.02)
+    raise AssertionError(f"Timed out waiting for counts active={active} queued={queued}")
+
+
+def transcribe_request(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    seconds: float,
+    filename: str = "sample.wav",
+    speech: bool = True,
+) -> tuple[int, dict]:
     response = client.post(
         "/transcribe/",
         headers=headers,
-        files={"audio": ("sample.wav", audio_bytes, "audio/wav")},
+        files={"audio": (filename, make_audio_bytes(seconds=seconds, speech=speech), "audio/wav")},
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "completed"
-    assert "task_id" in payload
-    assert isinstance(payload["transcripts"], list)
-    assert payload["transcripts"][0]["speaker_id"] == "0"
+    return response.status_code, response.json()
+
+
+def test_health_is_public(tmp_path: Path):
+    with build_client(tmp_path) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["status"] == "healthy"
+
+
+def test_transcribe_requires_api_key(tmp_path: Path):
+    with build_client(tmp_path) as client:
+        response = client.post("/transcribe/")
+        assert response.status_code == 401
+
+
+def test_model_load_and_transcribe_flow(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(tmp_path) as client:
+        load_models(client, headers)
+
+        response = client.post(
+            "/transcribe/",
+            headers=headers,
+            files={"audio": ("sample.wav", make_audio_bytes(), "audio/wav")},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert "task_id" in payload
+        assert isinstance(payload["transcripts"], list)
+        assert payload["transcripts"][0]["speaker_id"] == "0"
+        assert payload["processing_speed"].endswith("x")
+
+        tasks = client.get("/api/v1/runtime/tasks", headers=headers)
+        recent = tasks.json()["recent"]
+        assert recent
+        assert recent[0]["status"] == "completed"
+        assert recent[0]["filename"] == "sample.wav"
+
+
+def test_transcribe_without_loaded_models_returns_409_and_does_not_queue(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(tmp_path) as client:
+        response = client.post(
+            "/transcribe/",
+            headers=headers,
+            files={"audio": ("sample.wav", make_audio_bytes(), "audio/wav")},
+        )
+        assert response.status_code == 409
+
+        tasks = client.get("/api/v1/runtime/tasks", headers=headers)
+        assert tasks.json()["counts"] == {"active": 0, "queued": 0, "recent": 0}
+
+
+def test_transcribe_silence_returns_400(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(tmp_path) as client:
+        load_models(client, headers)
+
+        response = client.post(
+            "/transcribe/",
+            headers=headers,
+            files={"audio": ("silence.wav", make_audio_bytes(seconds=1.0, speech=False), "audio/wav")},
+        )
+        assert response.status_code == 400
+        assert "No speech activity detected" in response.json()["detail"]
+
+
+def test_queue_full_returns_503(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(
+        tmp_path,
+        max_parallel_tasks=1,
+        max_queued_tasks=1,
+        asr_options={"sleep_per_second": 0.4},
+    ) as client:
+        load_models(client, headers)
+
+        results: dict[str, tuple[int, dict]] = {}
+
+        def run_in_thread(name: str, duration: float) -> None:
+            results[name] = transcribe_request(client, headers, seconds=duration, filename=f"{name}.wav")
+
+        first = threading.Thread(target=run_in_thread, args=("first", 2.5))
+        second = threading.Thread(target=run_in_thread, args=("second", 2.5))
+        first.start()
+        wait_for_counts(client, headers, active=1, queued=0)
+
+        second.start()
+        wait_for_counts(client, headers, active=1, queued=1)
+
+        status_code, payload = transcribe_request(client, headers, seconds=1.0, filename="third.wav")
+        assert status_code == 503
+        assert payload["detail"]["code"] == "queue_full"
+        assert payload["detail"]["active_tasks"] == 1
+        assert payload["detail"]["queued_tasks"] == 1
+
+        first.join()
+        second.join()
+        assert results["first"][0] == 200
+        assert results["second"][0] == 200
+
+
+def test_shorter_task_can_finish_before_longer_task(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(
+        tmp_path,
+        max_parallel_tasks=2,
+        max_queued_tasks=0,
+        asr_options={"sleep_per_second": 0.3},
+    ) as client:
+        load_models(client, headers)
+
+        completion_order: list[str] = []
+
+        def run_and_record(name: str, duration: float) -> None:
+            status_code, _ = transcribe_request(client, headers, seconds=duration, filename=f"{name}.wav")
+            assert status_code == 200
+            completion_order.append(name)
+
+        long_thread = threading.Thread(target=run_and_record, args=("long", 3.0))
+        short_thread = threading.Thread(target=run_and_record, args=("short", 1.0))
+        long_thread.start()
+        short_thread.start()
+        long_thread.join()
+        short_thread.join()
+
+        assert completion_order[0] == "short"
+
+
+def test_runtime_limits_can_be_updated_online_for_new_tasks(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(
+        tmp_path,
+        max_parallel_tasks=1,
+        max_queued_tasks=0,
+        asr_options={"sleep_per_second": 0.35},
+    ) as client:
+        load_models(client, headers)
+
+        results: dict[str, tuple[int, dict]] = {}
+
+        def run_in_thread(name: str, duration: float) -> None:
+            results[name] = transcribe_request(client, headers, seconds=duration, filename=f"{name}.wav")
+
+        first = threading.Thread(target=run_in_thread, args=("first", 2.0))
+        first.start()
+        wait_for_counts(client, headers, active=1, queued=0)
+
+        update = client.post(
+            "/api/v1/runtime/limits",
+            headers=headers,
+            json={"max_parallel_tasks": 1, "max_queued_tasks": 1, "recent_task_limit": 5},
+        )
+        assert update.status_code == 200
+
+        second = threading.Thread(target=run_in_thread, args=("second", 1.0))
+        second.start()
+        wait_for_counts(client, headers, active=1, queued=1)
+
+        first.join()
+        second.join()
+        assert results["first"][0] == 200
+        assert results["second"][0] == 200
+
+        override_path = tmp_path / "data" / "runtime_overrides.toml"
+        assert override_path.exists()
+        content = override_path.read_text(encoding="utf-8")
+        assert "max_queued_tasks = 1" in content
+        assert "recent_task_limit = 5" in content
+
+
+def test_runtime_limits_endpoint_returns_latest_values(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(tmp_path) as client:
+        response = client.post(
+            "/api/v1/runtime/limits",
+            headers=headers,
+            json={"max_parallel_tasks": 3, "max_queued_tasks": 4, "recent_task_limit": 6},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "max_parallel_tasks": 3,
+            "max_queued_tasks": 4,
+            "recent_task_limit": 6,
+        }
+
+        current = client.get("/api/v1/runtime/limits", headers=headers)
+        assert current.status_code == 200
+        assert current.json()["max_parallel_tasks"] == 3
+
+
+def test_load_settings_applies_runtime_override_file(tmp_path: Path):
+    project_root = tmp_path / "project"
+    config_dir = project_root / "config"
+    data_dir = project_root / "runtime-state"
+    models_dir = project_root / "models"
+    config_dir.mkdir(parents=True)
+    data_dir.mkdir(parents=True)
+    (models_dir / "asr").mkdir(parents=True)
+    (models_dir / "diar").mkdir(parents=True)
+
+    (config_dir / "app.toml").write_text(
+        """
+[app]
+name = "MSR"
+service_name = "Multi Speaker Recognization"
+version = "0.1.0"
+host = "127.0.0.1"
+port = 8011
+log_level = "INFO"
+default_language = "zh"
+temp_dir = "tmp"
+strict_offline = true
+
+[security]
+api_key = "test-key"
+
+[web]
+title = "MSR Console"
+
+[runtime]
+max_parallel_tasks = 1
+max_queued_tasks = 2
+recent_task_limit = 10
+data_dir = "runtime-state"
+""".strip(),
+        encoding="utf-8",
+    )
+    (config_dir / "models.toml").write_text(
+        """
+[[models]]
+id = "funasr-paraformer-zh"
+kind = "asr"
+backend = "funasr"
+local_path = "models/asr"
+
+[[models]]
+id = "3dspeaker-default"
+kind = "diarization"
+backend = "3d_speaker"
+local_path = "models/diar"
+""".strip(),
+        encoding="utf-8",
+    )
+    (data_dir / "runtime_overrides.toml").write_text(
+        """
+[runtime]
+max_parallel_tasks = 4
+max_queued_tasks = 7
+recent_task_limit = 9
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(project_root=project_root)
+    assert settings.runtime.max_parallel_tasks == 4
+    assert settings.runtime.max_queued_tasks == 7
+    assert settings.runtime.recent_task_limit == 9
+    assert settings.runtime.data_dir == data_dir

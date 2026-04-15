@@ -3,7 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from msr.api.deps import get_container
-from msr.api.schemas import AuthCheckResponse, ModelInfo, RuntimeStateResponse
+from msr.api.schemas import (
+    AuthCheckResponse,
+    ModelInfo,
+    RuntimeLimitsResponse,
+    RuntimeLimitsUpdateRequest,
+    RuntimeStateResponse,
+    RuntimeTasksResponse,
+)
 from msr.core.errors import BackendLoadError, ModelBusyError, ModelNotFoundError, ModelNotLoadedError
 from msr.core.security import require_api_key
 
@@ -45,6 +52,29 @@ async def unload_model(kind: str, model_id: str, _: str = Depends(require_api_ke
 @router.get("/runtime/active", response_model=RuntimeStateResponse)
 async def runtime_active(_: str = Depends(require_api_key), container=Depends(get_container)):
     return container.model_manager.active_state()
+
+
+@router.get("/runtime/tasks", response_model=RuntimeTasksResponse)
+async def runtime_tasks(_: str = Depends(require_api_key), container=Depends(get_container)):
+    return container.task_manager.task_snapshot()
+
+
+@router.get("/runtime/limits", response_model=RuntimeLimitsResponse)
+async def runtime_limits(_: str = Depends(require_api_key), container=Depends(get_container)):
+    return container.task_manager.limits_snapshot()
+
+
+@router.post("/runtime/limits", response_model=RuntimeLimitsResponse)
+async def update_runtime_limits(
+    payload: RuntimeLimitsUpdateRequest,
+    _: str = Depends(require_api_key),
+    container=Depends(get_container),
+):
+    return container.task_manager.update_limits(
+        max_parallel_tasks=payload.max_parallel_tasks,
+        max_queued_tasks=payload.max_queued_tasks,
+        recent_task_limit=payload.recent_task_limit,
+    )
 
 
 @router.get("/system/resources")

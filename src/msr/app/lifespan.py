@@ -21,4 +21,9 @@ async def app_lifespan(app: FastAPI):
     settings: Settings = app.state.container.settings
     _apply_offline_env(settings)
     Path(settings.app.temp_dir).mkdir(parents=True, exist_ok=True)
-    yield
+    Path(settings.runtime.data_dir).mkdir(parents=True, exist_ok=True)
+    await app.state.container.task_manager.start()
+    try:
+        yield
+    finally:
+        await app.state.container.task_manager.shutdown()
