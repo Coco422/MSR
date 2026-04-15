@@ -408,7 +408,60 @@ a {
 }
 
 .topbar-actions {
+  align-items: center;
   justify-content: flex-end;
+}
+
+.topbar-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f7f9f7;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.page-banner {
+  display: grid;
+  gap: 4px;
+  margin: 0 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: #f8faf8;
+}
+
+.page-banner strong {
+  font-size: 14px;
+}
+
+.page-banner p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.page-banner.is-ok {
+  background: rgba(47, 125, 79, 0.08);
+  border-color: rgba(47, 125, 79, 0.22);
+  color: var(--ok);
+}
+
+.page-banner.is-warn {
+  background: rgba(165, 107, 19, 0.08);
+  border-color: rgba(165, 107, 19, 0.22);
+  color: var(--warn);
+}
+
+.page-banner.is-danger {
+  background: rgba(162, 60, 51, 0.08);
+  border-color: rgba(162, 60, 51, 0.24);
+  color: var(--danger);
 }
 
 .content-scroll {
@@ -1031,7 +1084,8 @@ tbody tr:hover {
 
   .sidebar,
   .content-scroll,
-  .topbar {
+  .topbar,
+  .page-banner {
     padding-left: 14px;
     padding-right: 14px;
   }

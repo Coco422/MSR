@@ -19,7 +19,7 @@
           </div>
           <div>
             <p class="brand-kicker">MSR 管理中台</p>
-            <h1>猎户式控制界面</h1>
+            <h1>服务管理控制台</h1>
             <p>统一管理模型加载、卸载与资源准备。</p>
           </div>
         </section>
@@ -114,10 +114,12 @@
             <input id="pageSearch" type="search" placeholder="搜索模型 ID、后端、设备或本地路径" />
           </label>
           <div class="topbar-actions">
+            <span id="pageMetaStamp" class="topbar-meta">最近刷新：尚未刷新</span>
             <button id="pageRefreshButton" class="button is-primary" type="button">刷新当前页</button>
             <a class="button" href="/docs">接口文档</a>
           </div>
         </header>
+        <div id="pageMessage" class="page-banner is-hidden" role="status" aria-live="polite"></div>
 
         <main class="content-scroll">
           <section class="page-head">

@@ -178,6 +178,33 @@ function setStatusBadge(target, tone, text) {
   target.textContent = text;
 }
 
+function showPageMessage(title, detail = "", tone = "ok") {
+  const banner = $("#pageMessage");
+  if (!banner) {
+    return;
+  }
+  banner.className = `page-banner is-${tone}`;
+  banner.innerHTML = `<strong>${escapeHtml(title)}</strong>${detail ? `<p>${escapeHtml(detail)}</p>` : ""}`;
+  banner.classList.remove("is-hidden");
+}
+
+function clearPageMessage() {
+  const banner = $("#pageMessage");
+  if (!banner) {
+    return;
+  }
+  banner.classList.add("is-hidden");
+  banner.innerHTML = "";
+}
+
+function markPageRefreshed(prefix = "最近刷新") {
+  const stamp = $("#pageMetaStamp");
+  if (!stamp) {
+    return;
+  }
+  stamp.textContent = `${prefix}：${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
 function setButtonBusy(button, busy, busyText) {
   if (!button) {
     return;
@@ -469,7 +496,7 @@ async function refreshAuth(quiet = true) {
   } catch (error) {
     renderAuthState(false, error.message);
     if (!quiet) {
-      window.alert(`鉴权失败：${error.message}`);
+      showPageMessage("鉴权失败", error.message, "danger");
     }
     return { authenticated: false, error };
   }
@@ -1178,6 +1205,7 @@ async function refreshDashboardPage() {
   renderActiveModels(data.runtime);
   renderDashboardTasks(data.tasks);
   hydrateUiSurface();
+  markPageRefreshed();
 }
 
 async function refreshModelsPage() {
@@ -1198,6 +1226,7 @@ async function refreshModelsPage() {
   renderModelRows(data.models);
   renderModelsMatrix(data.models);
   hydrateUiSurface();
+  markPageRefreshed();
 }
 
 async function refreshRuntimePage() {
@@ -1221,6 +1250,7 @@ async function refreshRuntimePage() {
   renderRuntimePressure(data.tasks, data.limits, data.resources);
   renderRuntimeTasks(data.tasks);
   hydrateUiSurface();
+  markPageRefreshed();
 }
 
 async function refreshTranscribePage() {
@@ -1242,6 +1272,7 @@ async function refreshTranscribePage() {
 
   renderTranscribeReadiness(data.runtime, data.tasks);
   hydrateUiSurface();
+  markPageRefreshed();
 }
 
 async function refreshCurrentPage() {
@@ -1272,6 +1303,12 @@ async function handleSaveKey() {
   setApiKey(input.value.trim());
   try {
     await refreshCurrentPage();
+    const auth = await refreshAuth(true);
+    if (auth.authenticated) {
+      showPageMessage("密钥已更新", "页面数据已按最新凭证重新刷新。", "ok");
+    } else {
+      showPageMessage("密钥已保存", "当前凭证尚未通过鉴权，请检查后重试。", "warn");
+    }
   } finally {
     setButtonBusy(button, false, "保存密钥");
   }
@@ -1281,7 +1318,11 @@ async function handleAuthCheck() {
   const button = $("#checkAuthButton");
   setButtonBusy(button, true, "校验中...");
   try {
-    await refreshAuth(false);
+    const result = await refreshAuth(false);
+    if (result.authenticated) {
+      showPageMessage("鉴权成功", "当前凭证可访问管理接口。", "ok");
+      markPageRefreshed("最近校验");
+    }
   } finally {
     setButtonBusy(button, false, "校验连接");
   }
@@ -1292,6 +1333,7 @@ async function handlePageRefresh() {
   setButtonBusy(button, true, "刷新中...");
   try {
     await refreshCurrentPage();
+    showPageMessage("页面已刷新", "当前页数据已完成一次主动刷新。", "ok");
   } finally {
     setButtonBusy(button, false, "刷新当前页");
   }
@@ -1319,9 +1361,11 @@ async function handleRuntimeLimitsSubmit(event) {
       body: JSON.stringify(payload),
     });
     await refreshRuntimePage();
+    showPageMessage("运行控制已保存", "新的并发与排队限制已写入运行态配置。", "ok");
   } catch (error) {
     setStatusBadge($("#runtimeLimitsBadge"), "danger", "保存失败");
     $("#runtimeLimitsText").textContent = `保存运行控制失败：${error.message}`;
+    showPageMessage("运行控制保存失败", error.message, "danger");
   } finally {
     setButtonBusy(button, false, "保存运行控制");
   }
@@ -1340,8 +1384,9 @@ async function handleModelAction(button) {
     if (PAGE === "dashboard") {
       await refreshDashboardPage();
     }
+    showPageMessage(action === "load" ? "模型已加载" : "模型已卸载", `${modelId} 已完成${action === "load" ? "加载" : "卸载"}操作。`, "ok");
   } catch (error) {
-    window.alert(`模型操作失败：${error.message}`);
+    showPageMessage("模型操作失败", error.message, "danger");
   } finally {
     setButtonBusy(button, false, action === "load" ? "加载模型" : "卸载模型");
   }
@@ -1358,6 +1403,7 @@ async function handleTranscribeSubmit(event) {
     if (hint) {
       hint.textContent = "请先选择要上传的音频文件。";
     }
+    showPageMessage("未选择音频文件", "请先选择待转写的音频后再提交。", "warn");
     return;
   }
 
@@ -1383,12 +1429,14 @@ async function handleTranscribeSubmit(event) {
       hint.textContent = "本次转写已完成，结果视图已同步刷新。";
     }
     await refreshTranscribePage();
+    showPageMessage("转写已完成", `处理速度 ${payload.processing_speed || "未知"}，有效说话人 ${payload.total_speakers ?? 0}。`, "ok");
   } catch (error) {
     renderTranscribeFailure(error.message);
     if (hint) {
       hint.textContent = `本次转写失败：${error.message}`;
     }
     await refreshTranscribePage();
+    showPageMessage("转写失败", error.message, "danger");
   } finally {
     setButtonBusy(button, false, "上传并转写");
   }
