@@ -9,3 +9,7 @@ data/
 models/*
 !models/.gitkeep
 !models/README.md
+
+*.wav
+.github/
+*.mp3
