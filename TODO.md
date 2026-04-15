@@ -19,6 +19,7 @@
 - [x] 同步 `/transcribe/` 已接入有界并行与有界排队
 - [x] 管理接口补齐：`runtime/tasks`、`runtime/limits`
 - [x] GUI 已补任务观察和运行控制面板
+- [x] GUI 已升级为多页后台式管理台：总览中心、模型管理、运行控制、转写示例
 - [x] 模型目录切换为仓库内相对路径 `models/`
 - [x] README、architecture、roadmap、doctor 已补齐
 - [x] 基础测试通过：`uv run --extra dev pytest`
@@ -50,6 +51,7 @@
 - [ ] 继续优化 `FunASR + 3D-Speaker` 在多人短句场景下的切句质量，减少“嗯/哦”等极短片段
 - [ ] 继续收敛默认链加载日志，评估是否要压低 `modelscope` / `datasets` 的纯信息级噪声
 - [ ] 继续优化 VAD 与 speaker 边界协同，避免整段会话被并成单个超长 VAD 段
+- [ ] 继续打磨前端细节：补页面级成功/失败提示、长列表虚拟化与更细的移动端适配
 
 ## 已完成的真实环境验收
 

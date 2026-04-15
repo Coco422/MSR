@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MSR 管理中台 | 转写示例</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="transcribe">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <section class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 18 12 4l8 14" />
+              <path d="M9 14h6" />
+              <path d="M7.5 18h9" />
+            </svg>
+          </div>
+          <div>
+            <p class="brand-kicker">MSR 管理中台</p>
+            <h1>猎户式控制界面</h1>
+            <p>提供同步转写接口的管理示例与结果观察。</p>
+          </div>
+        </section>
+
+        <section class="side-section">
+          <p class="side-title">导航</p>
+          <nav class="nav-list">
+            <a class="nav-link" data-nav="dashboard" href="/">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+                  <rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5" />
+                  <rect x="13.5" y="11" width="7" height="9.5" rx="1.5" />
+                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+                </svg>
+              </span>
+              <span>总览中心</span>
+            </a>
+            <a class="nav-link" data-nav="models" href="/models">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 7.5h14" />
+                  <path d="M5 12h14" />
+                  <path d="M5 16.5h14" />
+                  <path d="M7 5v14" />
+                </svg>
+              </span>
+              <span>模型管理</span>
+            </a>
+            <a class="nav-link" data-nav="runtime" href="/runtime">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 18h16" />
+                  <path d="M6.5 15.5V12" />
+                  <path d="M11 15.5V8.5" />
+                  <path d="M15.5 15.5V10" />
+                  <path d="M20 15.5V6.5" />
+                </svg>
+              </span>
+              <span>运行控制</span>
+            </a>
+            <a class="nav-link" data-nav="transcribe" href="/transcribe">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M7 5.5h10" />
+                  <path d="M7 9.5h10" />
+                  <path d="M7 13.5h6" />
+                  <path d="m14.5 16.5 2 2 4-4" />
+                </svg>
+              </span>
+              <span>转写示例</span>
+            </a>
+          </nav>
+        </section>
+
+        <section class="side-section">
+          <div class="sidebar-card stack">
+            <div>
+              <h2>接入凭证</h2>
+              <p class="meta-note">同步转写示例会直接调用对外主入口，用于联调与管理验证。</p>
+            </div>
+            <div class="field">
+              <label for="apiKey">API 密钥</label>
+              <input id="apiKey" type="password" placeholder="请输入 X-API-Key" />
+            </div>
+            <div class="button-row">
+              <button id="saveKeyButton" class="button is-primary" type="button">保存密钥</button>
+              <button id="checkAuthButton" class="button" type="button">校验连接</button>
+            </div>
+            <div class="stack">
+              <span id="authStatusBadge" class="status-badge">未校验</span>
+              <p id="authStatusText" class="meta-note">保存密钥后可提交音频并查看结构化结果。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-section">
+          <div class="sidebar-card">
+            <h2>接口定位</h2>
+            <p class="meta-note">这里是同步接口示例页，便于验证模型、资源和任务控制是否协同正常，不是终端客户前台。</p>
+          </div>
+        </section>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <label class="search-box" aria-label="页面搜索">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input id="pageSearch" type="search" placeholder="搜索说话人、时间片段、文本内容或状态" />
+          </label>
+          <div class="topbar-actions">
+            <button id="pageRefreshButton" class="button is-primary" type="button">刷新当前页</button>
+            <a class="button" href="/docs">接口文档</a>
+          </div>
+        </header>
+
+        <main class="content-scroll">
+          <section class="page-head">
+            <div>
+              <p class="page-kicker">转写示例</p>
+              <h2>同步转写联调页面</h2>
+              <p class="page-summary">
+                页面会以管理视图的方式展示转写结果、说话人统计和基础处理指标，避免直接输出整段 JSON，便于更直观地判断结果是否可用于上游集成。
+              </p>
+            </div>
+            <div class="page-callout panel">
+              <div class="panel-header">
+                <div class="section-title">
+                  <span class="section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 4v16" />
+                      <path d="M6 10.5 12 4l6 6.5" />
+                      <path d="M6 19.5h12" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3>结果视图</h3>
+                    <p>逐段转写与说话人统计可切换查看。</p>
+                  </div>
+                </div>
+              </div>
+              <div id="speakerFilterGroup" class="chip-group" data-filter-target="#transcriptTimeline [data-tags]">
+                <button class="chip is-active" type="button" data-filter-value="all">全部说话人</button>
+                <button class="chip" type="button" data-filter-value="speaker-0">说话人 A</button>
+                <button class="chip" type="button" data-filter-value="speaker-1">说话人 B</button>
+                <button class="chip" type="button" data-filter-value="speaker-2">说话人 C</button>
+                <button class="chip" type="button" data-filter-value="speaker-3">说话人 D</button>
+              </div>
+            </div>
+          </section>
+
+          <div id="searchEmpty" class="search-empty is-hidden">
+            <div>
+              <strong>没有匹配到当前搜索内容</strong>
+              <span>可以尝试搜索说话人标签、时间片段或文本关键词。</span>
+            </div>
+          </div>
+
+          <section class="metrics-grid">
+            <article class="metric-card" data-search="asr 模型 状态" data-tags="all readiness">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">ASR 就绪</p>
+                  <p class="metric-subtitle">当前激活的语音识别后端</p>
+                </div>
+                <span class="status-badge">ASR</span>
+              </div>
+              <div id="transcribeMetricAsr" class="metric-value">待检测</div>
+              <div class="metric-foot"><span id="transcribeMetricAsrNote" class="muted">等待运行态</span></div>
+            </article>
+
+            <article class="metric-card" data-search="说话人 分离 diarization" data-tags="all readiness">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">分离就绪</p>
+                  <p class="metric-subtitle">当前激活的说话人分离后端</p>
+                </div>
+                <span class="status-badge">DIAR</span>
+              </div>
+              <div id="transcribeMetricDiarization" class="metric-value">待检测</div>
+              <div class="metric-foot"><span id="transcribeMetricDiarizationNote" class="muted">等待运行态</span></div>
+            </article>
+
+            <article class="metric-card" data-search="任务 排队 并发" data-tags="all queue">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">当前任务压力</p>
+                  <p class="metric-subtitle">当前运行中与排队中的任务总量</p>
+                </div>
+                <span class="status-badge">QUEUE</span>
+              </div>
+              <div id="transcribeMetricQueue" class="metric-value">0 / 0</div>
+              <div class="metric-foot"><span id="transcribeMetricQueueNote" class="muted">等待任务快照</span></div>
+            </article>
+
+            <article class="metric-card" data-search="最近 结果 速度 说话人" data-tags="all result">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">最近结果摘要</p>
+                  <p class="metric-subtitle">本页最近一次转写后的处理速度</p>
+                </div>
+                <span class="status-badge">RESULT</span>
+              </div>
+              <div id="transcribeMetricLast" class="metric-value">暂无</div>
+              <div class="metric-foot"><span id="transcribeMetricLastNote" class="muted">请先上传音频</span></div>
+            </article>
+          </section>
+
+          <section class="dual-grid">
+            <section class="upload-card" data-search="上传 转写 音频 文件 提交" data-tags="all upload">
+              <div class="panel-header">
+                <div class="section-title">
+                  <span class="section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 4v11" />
+                      <path d="m7 9 5-5 5 5" />
+                      <path d="M5.5 19.5h13" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3>提交音频</h3>
+                    <p>调用同步 <span class="mono">/transcribe/</span> 进行联调。</p>
+                  </div>
+                </div>
+              </div>
+              <form id="transcribeForm" class="stack">
+                <div class="upload-dropzone">
+                  <div class="field">
+                    <label for="audioInput">音频文件</label>
+                    <input id="audioInput" name="audio" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a" required />
+                  </div>
+                  <div class="legend-row">
+                    <span class="file-chip" id="audioFileName">尚未选择文件</span>
+                    <span class="file-chip" id="audioFileSize">大小未知</span>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button id="submitTranscribeButton" class="button is-primary" type="submit">上传并转写</button>
+                </div>
+              </form>
+              <p id="transcribeRequestHint" class="footer-note">按钮会保持忙碌态直到接口返回，随后再刷新任务列表与结果视图。</p>
+            </section>
+
+            <section class="status-card" data-search="说明 管理 同步 接口" data-tags="all note">
+              <div class="panel-header">
+                <div class="section-title">
+                  <span class="section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="8.5" />
+                      <path d="M12 10v5" />
+                      <path d="M12 7.5h.01" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3>结果阅读说明</h3>
+                    <p>以结构化业务视图代替原始 JSON 展示。</p>
+                  </div>
+                </div>
+              </div>
+              <ul class="hint-list">
+                <li>“逐段转写”按时间线展示文本、说话人与起止时间。</li>
+                <li>“说话人统计”会汇总每位说话人的累计时长与片段数。</li>
+                <li>顶部 4 个指标会同步展示模型就绪情况、队列压力与最近处理速度。</li>
+                <li>失败时会在本页显示结构化错误信息，而不是整段原始异常体。</li>
+              </ul>
+            </section>
+          </section>
+
+          <section class="panel" data-search="结果 说话人 时间线 文本" data-tags="all result">
+            <div class="panel-header">
+              <div class="section-title">
+                <span class="section-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M6 6.5h12" />
+                    <path d="M6 12h12" />
+                    <path d="M6 17.5h8" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>结果概览</h3>
+                  <p>最近一次提交的处理摘要与状态。</p>
+                </div>
+              </div>
+            </div>
+            <div id="transcribeSummary" class="transcript-meta-grid">
+              <div class="empty-state grid-span-3">
+                <div>
+                  <strong>尚未生成转写结果</strong>
+                  <span>提交音频后，这里会显示音频时长、处理时间、处理速度和说话人数。</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div class="section-title">
+                <span class="section-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M5 7.5h14" />
+                    <path d="M5 12h14" />
+                    <path d="M5 16.5h14" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>结构化结果</h3>
+                  <p>按时间线与说话人统计切换查看。</p>
+                </div>
+              </div>
+              <div class="tab-list" data-tab-list data-tab-default="transcripts">
+                <button class="tab-button is-active" type="button" data-tab-target="transcripts">逐段转写</button>
+                <button class="tab-button" type="button" data-tab-target="speakers">说话人统计</button>
+              </div>
+            </div>
+
+            <div class="tab-panels">
+              <div data-tab-panel data-tab-group="default" class="is-active">
+                <div id="transcriptTimeline" class="timeline-list">
+                  <div class="empty-state">
+                    <div>
+                      <strong>暂无逐段转写内容</strong>
+                      <span>提交音频后，这里会显示按说话人切分后的时间线。</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div data-tab-panel data-tab-group="default">
+                <div id="speakerSummary" class="speaker-grid">
+                  <div class="empty-state grid-span-3">
+                    <div>
+                      <strong>暂无说话人统计</strong>
+                      <span>提交音频后，这里会汇总每位说话人的累计时长和片段数。</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

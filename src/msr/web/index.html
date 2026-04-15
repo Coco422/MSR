@@ -3,102 +3,344 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MSR Console</title>
+    <title>MSR 管理中台 | 总览中心</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body>
-    <main class="layout">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">MSR</p>
-          <h1>Multi Speaker Recognization Console</h1>
-          <p class="subtitle">面向管理人员与联调阶段的微服务控制台，用于模型管理、资源监控、运行控制与接口示例调用。</p>
-        </div>
-        <div class="hero-card">
-          <label for="apiKey">API Key</label>
-          <input id="apiKey" type="password" placeholder="输入 X-API-Key" />
-          <button id="saveKeyButton">保存</button>
-          <p id="authStatus" class="muted">尚未校验</p>
-        </div>
-      </header>
-
-      <section class="panel-grid">
-        <section class="panel">
-          <div class="panel-header">
-            <h2>管理说明</h2>
+  <body data-page="dashboard">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <section class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 18 12 4l8 14" />
+              <path d="M9 14h6" />
+              <path d="M7.5 18h9" />
+            </svg>
           </div>
-          <div class="notice">
-            <p>GUI 仅用于管理接口示例、模型加载控制和前期资源观察，不是终端客户页面。</p>
-            <p>对上游仍以 API 为主，当前页面重点展示运行状态、并发上限、排队情况和同步转写示例。</p>
+          <div>
+            <p class="brand-kicker">MSR 管理中台</p>
+            <h1>猎户式控制界面</h1>
+            <p>面向管理人员与联调阶段的微服务后台。</p>
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-header">
-            <h2>当前激活模型</h2>
-            <button id="refreshRuntimeButton" class="ghost">刷新</button>
-          </div>
-          <pre id="runtimeState" class="code-block">Loading...</pre>
+        <section class="side-section">
+          <p class="side-title">导航</p>
+          <nav class="nav-list">
+            <a class="nav-link" data-nav="dashboard" href="/">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+                  <rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5" />
+                  <rect x="13.5" y="11" width="7" height="9.5" rx="1.5" />
+                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+                </svg>
+              </span>
+              <span>总览中心</span>
+            </a>
+            <a class="nav-link" data-nav="models" href="/models">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 7.5h14" />
+                  <path d="M5 12h14" />
+                  <path d="M5 16.5h14" />
+                  <path d="M7 5v14" />
+                </svg>
+              </span>
+              <span>模型管理</span>
+            </a>
+            <a class="nav-link" data-nav="runtime" href="/runtime">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 18h16" />
+                  <path d="M6.5 15.5V12" />
+                  <path d="M11 15.5V8.5" />
+                  <path d="M15.5 15.5V10" />
+                  <path d="M20 15.5V6.5" />
+                </svg>
+              </span>
+              <span>运行控制</span>
+            </a>
+            <a class="nav-link" data-nav="transcribe" href="/transcribe">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M7 5.5h10" />
+                  <path d="M7 9.5h10" />
+                  <path d="M7 13.5h6" />
+                  <path d="m14.5 16.5 2 2 4-4" />
+                </svg>
+              </span>
+              <span>转写示例</span>
+            </a>
+          </nav>
         </section>
 
-        <section class="panel">
-          <div class="panel-header">
-            <h2>系统资源</h2>
-            <button id="refreshResourcesButton" class="ghost">刷新</button>
+        <section class="side-section">
+          <div class="sidebar-card stack">
+            <div>
+              <h2>接入凭证</h2>
+              <p class="meta-note">用于调用管理接口与同步转写示例。当前页面仅作为管理入口，不面向终端客户。</p>
+            </div>
+            <div class="field">
+              <label for="apiKey">API 密钥</label>
+              <input id="apiKey" type="password" placeholder="请输入 X-API-Key" />
+            </div>
+            <div class="button-row">
+              <button id="saveKeyButton" class="button is-primary" type="button">保存密钥</button>
+              <button id="checkAuthButton" class="button" type="button">校验连接</button>
+            </div>
+            <div class="stack">
+              <span id="authStatusBadge" class="status-badge">未校验</span>
+              <p id="authStatusText" class="meta-note">请先录入密钥，再查看运行数据。</p>
+            </div>
           </div>
-          <pre id="resourceState" class="code-block">Loading...</pre>
-        </section>
-      </section>
-
-      <section class="panel-grid">
-        <section class="panel">
-          <div class="panel-header">
-            <h2>运行控制</h2>
-            <button id="refreshLimitsButton" class="ghost">刷新</button>
-          </div>
-          <form id="runtimeLimitsForm" class="limit-form">
-            <label for="maxParallelInput">最大并行处理量</label>
-            <input id="maxParallelInput" type="number" min="1" step="1" />
-
-            <label for="maxQueuedInput">最大排队量</label>
-            <input id="maxQueuedInput" type="number" min="0" step="1" />
-
-            <label for="recentTaskLimitInput">最近任务保留数</label>
-            <input id="recentTaskLimitInput" type="number" min="1" step="1" />
-
-            <button type="submit">保存运行控制</button>
-          </form>
-          <pre id="runtimeLimitsState" class="code-block">Loading...</pre>
         </section>
 
-        <section class="panel">
-          <div class="panel-header">
-            <h2>任务观察</h2>
-            <button id="refreshTasksButton" class="ghost">刷新</button>
+        <section class="side-section">
+          <div class="sidebar-card">
+            <h2>使用定位</h2>
+            <p class="meta-note">GUI 仅提供模型控制、资源观察、运行控制和接口联调示例。对上游系统仍以 API 调用为主。</p>
           </div>
-          <pre id="taskState" class="code-block">Loading...</pre>
         </section>
-      </section>
+      </aside>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>模型注册表</h2>
-          <button id="refreshModelsButton" class="ghost">刷新</button>
-        </div>
-        <div id="modelsTable"></div>
-      </section>
+      <div class="main-shell">
+        <header class="topbar">
+          <label class="search-box" aria-label="页面搜索">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input id="pageSearch" type="search" placeholder="搜索指标、模块、任务或说明" />
+          </label>
+          <div class="topbar-actions">
+            <button id="pageRefreshButton" class="button is-primary" type="button">刷新当前页</button>
+            <a class="button" href="/docs">接口文档</a>
+          </div>
+        </header>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>转写</h2>
-        </div>
-        <form id="transcribeForm" class="transcribe-form">
-          <input id="audioInput" name="audio" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a" required />
-          <button type="submit">上传并转写</button>
-        </form>
-        <pre id="transcribeResult" class="code-block">等待上传音频...</pre>
-      </section>
-    </main>
+        <main class="content-scroll">
+          <section class="page-head">
+            <div>
+              <p class="page-kicker">总览中心</p>
+              <h2>微服务运行总览</h2>
+              <p class="page-summary">
+                这里聚合展示模型加载状态、资源水位、任务并发与最近处理结果，用于让管理人员快速判断当前服务是否适合继续接收上游请求。
+              </p>
+            </div>
+            <div class="page-callout panel">
+              <div class="panel-header">
+                <div class="section-title">
+                  <span class="section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 3v18" />
+                      <path d="M3 12h18" />
+                      <path d="m6 6 12 12" />
+                      <path d="m18 6-12 12" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3>焦点过滤</h3>
+                    <p>仅保留当前关心的总览模块。</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chip-group" data-filter-target="#dashboardScope [data-tags]">
+                <button class="chip is-active" type="button" data-filter-value="all">全部</button>
+                <button class="chip" type="button" data-filter-value="资源">资源</button>
+                <button class="chip" type="button" data-filter-value="模型">模型</button>
+                <button class="chip" type="button" data-filter-value="任务">任务</button>
+              </div>
+            </div>
+          </section>
+
+          <div id="searchEmpty" class="search-empty is-hidden">
+            <div>
+              <strong>没有匹配到当前搜索内容</strong>
+              <span>可以尝试搜索“资源”“模型”“排队”“GPU”等关键词。</span>
+            </div>
+          </div>
+
+          <section id="dashboardScope" class="stack">
+            <section class="metrics-grid">
+              <article class="metric-card" data-search="鉴权 接入 连接" data-tags="全部 接入">
+                <div class="metric-head">
+                  <div>
+                    <p class="metric-title">接入状态</p>
+                    <p class="metric-subtitle">管理接口鉴权与访问链路</p>
+                  </div>
+                  <span id="metricAuthBadge" class="status-badge">未连接</span>
+                </div>
+                <div id="metricAuthValue" class="metric-value">待校验</div>
+                <div class="metric-foot">
+                  <span id="metricAuthNote" class="muted">尚未执行校验</span>
+                </div>
+              </article>
+
+              <article class="metric-card" data-search="模型 加载 注册" data-tags="全部 模型">
+                <div class="metric-head">
+                  <div>
+                    <p class="metric-title">模型装载</p>
+                    <p class="metric-subtitle">当前可用与已加载模型</p>
+                  </div>
+                  <span class="status-badge">模型</span>
+                </div>
+                <div id="metricModelValue" class="metric-value">0 / 0</div>
+                <div class="metric-foot">
+                  <span id="metricModelNote" class="muted">等待刷新模型注册表</span>
+                </div>
+              </article>
+
+              <article class="metric-card" data-search="并发 排队 任务" data-tags="全部 任务">
+                <div class="metric-head">
+                  <div>
+                    <p class="metric-title">任务压力</p>
+                    <p class="metric-subtitle">并发槽与等待队列占用</p>
+                  </div>
+                  <span class="status-badge">队列</span>
+                </div>
+                <div id="metricTaskValue" class="metric-value">0 / 0</div>
+                <div class="metric-foot">
+                  <span id="metricTaskNote" class="muted">等待采集任务快照</span>
+                </div>
+              </article>
+
+              <article class="metric-card" data-search="GPU 显存 资源" data-tags="全部 资源">
+                <div class="metric-head">
+                  <div>
+                    <p class="metric-title">GPU 水位</p>
+                    <p class="metric-subtitle">首卡利用率与显存占用</p>
+                  </div>
+                  <span class="status-badge">资源</span>
+                </div>
+                <div id="metricGpuValue" class="metric-value">未检测</div>
+                <div class="metric-foot">
+                  <span id="metricGpuNote" class="muted">等待资源采样</span>
+                </div>
+              </article>
+            </section>
+
+            <section class="dashboard-grid">
+              <section class="panel" data-search="资源 CPU 内存 GPU 水位" data-tags="全部 资源">
+                <div class="panel-header">
+                  <div class="section-title">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M6 7h12" />
+                        <path d="M6 12h12" />
+                        <path d="M6 17h12" />
+                      </svg>
+                    </span>
+                    <div>
+                      <h3>资源仪表盘</h3>
+                      <p>CPU、内存与 GPU 的当前水位及短时趋势。</p>
+                    </div>
+                  </div>
+                  <span id="resourceSampleHint" class="status-badge">待采样</span>
+                </div>
+                <div id="resourceDashboard" class="resource-list">
+                  <div class="empty-state">
+                    <div>
+                      <strong>尚未获取资源数据</strong>
+                      <span>保存密钥并完成校验后，这里会自动开始轮询。</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" data-search="模型 当前激活 默认链 asr diarization" data-tags="全部 模型">
+                <div class="panel-header">
+                  <div class="section-title">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M4.5 8.5h15" />
+                        <path d="M4.5 15.5h15" />
+                        <path d="M8.5 5v14" />
+                      </svg>
+                    </span>
+                    <div>
+                      <h3>激活模型视图</h3>
+                      <p>当前已挂载在主链上的 ASR 与说话人分离后端。</p>
+                    </div>
+                  </div>
+                  <a class="button" href="/models">进入模型管理</a>
+                </div>
+                <div id="activeModelCards" class="model-card-grid">
+                  <div class="empty-state">
+                    <div>
+                      <strong>暂无已激活模型</strong>
+                      <span>请前往模型管理页加载默认模型或备选模型。</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <section class="dual-grid">
+              <section class="panel" data-search="任务 运行中 排队 最近完成 失败" data-tags="全部 任务">
+                <div class="panel-header">
+                  <div class="section-title">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M5 18h14" />
+                        <path d="M7 15.5v-3" />
+                        <path d="M12 15.5v-6" />
+                        <path d="M17 15.5v-9" />
+                      </svg>
+                    </span>
+                    <div>
+                      <h3>任务观察</h3>
+                      <p>以列表和切页形式查看当前执行与最近结果。</p>
+                    </div>
+                  </div>
+                  <a class="button" href="/runtime">进入运行控制</a>
+                </div>
+                <div class="tab-list" data-tab-list data-tab-default="active">
+                  <button class="tab-button is-active" type="button" data-tab-target="active">运行中</button>
+                  <button class="tab-button" type="button" data-tab-target="queued">排队中</button>
+                  <button class="tab-button" type="button" data-tab-target="recent">最近完成</button>
+                </div>
+                <div class="tab-panels">
+                  <div id="dashboardTasksActive" data-tab-panel data-tab-group="default" class="is-active"></div>
+                  <div id="dashboardTasksQueued" data-tab-panel data-tab-group="default"></div>
+                  <div id="dashboardTasksRecent" data-tab-panel data-tab-group="default"></div>
+                </div>
+              </section>
+
+              <section class="panel" data-search="说明 管理 微服务 GUI 同步接口" data-tags="全部 说明">
+                <div class="panel-header">
+                  <div class="section-title">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8.5" />
+                        <path d="M12 10v5" />
+                        <path d="M12 7.5h.01" />
+                      </svg>
+                    </span>
+                    <div>
+                      <h3>管理界面说明</h3>
+                      <p>控制台设计目标与当前主链边界。</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="notice-card">
+                  <h3>当前定位</h3>
+                  <p>本界面是微服务管理入口与接口示例页，重点服务管理人员、测试人员和上游联调，不承担终端客户交互职责。</p>
+                </div>
+                <div class="split-line"></div>
+                <ul class="hint-list">
+                  <li>对外主入口仍为同步 <span class="mono">/transcribe/</span>。</li>
+                  <li>任务过载时会按并发上限与排队上限做有界控制。</li>
+                  <li>说话人分离、ASR 与资源控制都以离线可部署为优先。</li>
+                  <li>本页聚焦“是否健康、是否可接单、是否需要干预”三个问题。</li>
+                </ul>
+                <p class="footer-note">如需深入调整模型、并发和排队，请分别进入“模型管理”和“运行控制”。</p>
+              </section>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
 
     <script src="/static/app.js"></script>
   </body>

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MSR 管理中台 | 模型管理</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="models">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <section class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 18 12 4l8 14" />
+              <path d="M9 14h6" />
+              <path d="M7.5 18h9" />
+            </svg>
+          </div>
+          <div>
+            <p class="brand-kicker">MSR 管理中台</p>
+            <h1>猎户式控制界面</h1>
+            <p>统一管理模型加载、卸载与资源准备。</p>
+          </div>
+        </section>
+
+        <section class="side-section">
+          <p class="side-title">导航</p>
+          <nav class="nav-list">
+            <a class="nav-link" data-nav="dashboard" href="/">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+                  <rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5" />
+                  <rect x="13.5" y="11" width="7" height="9.5" rx="1.5" />
+                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+                </svg>
+              </span>
+              <span>总览中心</span>
+            </a>
+            <a class="nav-link" data-nav="models" href="/models">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 7.5h14" />
+                  <path d="M5 12h14" />
+                  <path d="M5 16.5h14" />
+                  <path d="M7 5v14" />
+                </svg>
+              </span>
+              <span>模型管理</span>
+            </a>
+            <a class="nav-link" data-nav="runtime" href="/runtime">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 18h16" />
+                  <path d="M6.5 15.5V12" />
+                  <path d="M11 15.5V8.5" />
+                  <path d="M15.5 15.5V10" />
+                  <path d="M20 15.5V6.5" />
+                </svg>
+              </span>
+              <span>运行控制</span>
+            </a>
+            <a class="nav-link" data-nav="transcribe" href="/transcribe">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M7 5.5h10" />
+                  <path d="M7 9.5h10" />
+                  <path d="M7 13.5h6" />
+                  <path d="m14.5 16.5 2 2 4-4" />
+                </svg>
+              </span>
+              <span>转写示例</span>
+            </a>
+          </nav>
+        </section>
+
+        <section class="side-section">
+          <div class="sidebar-card stack">
+            <div>
+              <h2>接入凭证</h2>
+              <p class="meta-note">模型加载、卸载与运行态查看都依赖管理密钥。</p>
+            </div>
+            <div class="field">
+              <label for="apiKey">API 密钥</label>
+              <input id="apiKey" type="password" placeholder="请输入 X-API-Key" />
+            </div>
+            <div class="button-row">
+              <button id="saveKeyButton" class="button is-primary" type="button">保存密钥</button>
+              <button id="checkAuthButton" class="button" type="button">校验连接</button>
+            </div>
+            <div class="stack">
+              <span id="authStatusBadge" class="status-badge">未校验</span>
+              <p id="authStatusText" class="meta-note">保存密钥后可查看模型注册表与状态变化。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-section">
+          <div class="sidebar-card">
+            <h2>操作原则</h2>
+            <p class="meta-note">按钮会在接口响应返回前保持忙碌状态，不会立即刷新，避免出现“点击后无反应”的误判。</p>
+          </div>
+        </section>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <label class="search-box" aria-label="页面搜索">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input id="pageSearch" type="search" placeholder="搜索模型 ID、后端、设备或本地路径" />
+          </label>
+          <div class="topbar-actions">
+            <button id="pageRefreshButton" class="button is-primary" type="button">刷新当前页</button>
+            <a class="button" href="/docs">接口文档</a>
+          </div>
+        </header>
+
+        <main class="content-scroll">
+          <section class="page-head">
+            <div>
+              <p class="page-kicker">模型管理</p>
+              <h2>模型注册表与装载控制</h2>
+              <p class="page-summary">
+                这里集中展示所有已注册模型的类型、后端、设备与路径健康度，并支持在线加载与卸载。模型变更不会依赖页面手动刷新，而是等待接口响应后再同步状态。
+              </p>
+            </div>
+            <div class="page-callout panel">
+              <div class="panel-header">
+                <div class="section-title">
+                  <span class="section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M4.5 12h15" />
+                      <path d="M12 4.5v15" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3>筛选视图</h3>
+                    <p>快速收敛到指定类型或状态。</p>
+                  </div>
+                </div>
+              </div>
+              <div class="chip-group" data-filter-target="#modelsTableBody tr[data-tags]">
+                <button class="chip is-active" type="button" data-filter-value="all">全部模型</button>
+                <button class="chip" type="button" data-filter-value="asr">仅 ASR</button>
+                <button class="chip" type="button" data-filter-value="diarization">仅说话人分离</button>
+                <button class="chip" type="button" data-filter-value="loaded">仅已加载</button>
+                <button class="chip" type="button" data-filter-value="idle">仅未加载</button>
+              </div>
+            </div>
+          </section>
+
+          <div id="searchEmpty" class="search-empty is-hidden">
+            <div>
+              <strong>没有匹配到当前搜索内容</strong>
+              <span>可以尝试搜索模型 ID、设备类型或路径关键字。</span>
+            </div>
+          </div>
+
+          <section class="metrics-grid">
+            <article class="metric-card" data-search="总模型 注册表" data-tags="all">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">注册模型</p>
+                  <p class="metric-subtitle">当前写入配置的模型总量</p>
+                </div>
+                <span class="status-badge">总量</span>
+              </div>
+              <div id="modelsMetricTotal" class="metric-value">0</div>
+              <div class="metric-foot"><span id="modelsMetricTotalNote" class="muted">等待模型列表</span></div>
+            </article>
+
+            <article class="metric-card" data-search="已加载 可用 主链" data-tags="all loaded">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">已加载模型</p>
+                  <p class="metric-subtitle">当前可直接参与服务的模型</p>
+                </div>
+                <span class="status-badge">已加载</span>
+              </div>
+              <div id="modelsMetricLoaded" class="metric-value">0</div>
+              <div class="metric-foot"><span id="modelsMetricLoadedNote" class="muted">等待模型列表</span></div>
+            </article>
+
+            <article class="metric-card" data-search="路径 有效 缺失" data-tags="all path">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">路径健康度</p>
+                  <p class="metric-subtitle">本地路径存在性检查</p>
+                </div>
+                <span class="status-badge">路径</span>
+              </div>
+              <div id="modelsMetricPath" class="metric-value">0%</div>
+              <div class="metric-foot"><span id="modelsMetricPathNote" class="muted">等待路径检查</span></div>
+            </article>
+
+            <article class="metric-card" data-search="默认 模型 设备" data-tags="all default">
+              <div class="metric-head">
+                <div>
+                  <p class="metric-title">默认链就绪</p>
+                  <p class="metric-subtitle">默认 ASR 与默认 diarization</p>
+                </div>
+                <span class="status-badge">默认</span>
+              </div>
+              <div id="modelsMetricDefault" class="metric-value">待判定</div>
+              <div class="metric-foot"><span id="modelsMetricDefaultNote" class="muted">等待主链状态</span></div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div class="section-title">
+                <span class="section-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M5 7.5h14" />
+                    <path d="M5 12h14" />
+                    <path d="M5 16.5h14" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>模型视图</h3>
+                  <p>在清单与分布图之间切换。</p>
+                </div>
+              </div>
+              <div class="tab-list" data-tab-list data-tab-default="table">
+                <button class="tab-button is-active" type="button" data-tab-target="table">模型清单</button>
+                <button class="tab-button" type="button" data-tab-target="matrix">后端分布</button>
+              </div>
+            </div>
+
+            <div class="tab-panels">
+              <div data-tab-panel data-tab-group="default" class="is-active">
+                <div class="table-shell">
+                  <div class="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>模型标识</th>
+                          <th>类型</th>
+                          <th>后端</th>
+                          <th>设备</th>
+                          <th>路径健康</th>
+                          <th>运行状态</th>
+                          <th>本地路径</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="modelsTableBody">
+                        <tr>
+                          <td colspan="8">
+                            <div class="empty-state">
+                              <div>
+                                <strong>尚未加载模型注册表</strong>
+                                <span>保存密钥并刷新后，这里会显示可操作模型。</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div data-tab-panel data-tab-group="default">
+                <div id="modelsMatrix" class="matrix-grid">
+                  <div class="empty-state grid-span-3">
+                    <div>
+                      <strong>尚无模型分布数据</strong>
+                      <span>刷新后将按 ASR、说话人分离、后端与设备进行聚合展示。</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

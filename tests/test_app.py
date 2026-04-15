@@ -182,6 +182,14 @@ def test_health_is_public(tmp_path: Path):
         assert response.json()["status"] == "healthy"
 
 
+def test_console_pages_are_public(tmp_path: Path):
+    with build_client(tmp_path) as client:
+        for path in ["/", "/models", "/runtime", "/transcribe"]:
+            response = client.get(path)
+            assert response.status_code == 200
+            assert "text/html" in response.headers["content-type"]
+
+
 def test_transcribe_requires_api_key(tmp_path: Path):
     with build_client(tmp_path) as client:
         response = client.post("/transcribe/")

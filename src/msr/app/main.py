@@ -33,9 +33,25 @@ def create_app(settings: Settings | None = None, project_root: Path | None = Non
     app.include_router(public_router)
     app.include_router(admin_router)
 
-    @app.get("/", include_in_schema=False)
-    async def home() -> FileResponse:
-        return FileResponse(web_dir / "index.html")
+    console_pages = {
+        "/": "index.html",
+        "/models": "models.html",
+        "/runtime": "runtime.html",
+        "/transcribe": "transcribe.html",
+    }
+
+    def build_console_handler(page_path: Path, endpoint_name: str):
+        async def serve_page() -> FileResponse:
+            return FileResponse(page_path)
+
+        serve_page.__name__ = endpoint_name
+        return serve_page
+
+    for route_path, filename in console_pages.items():
+        endpoint_name = f"console_{filename.replace('.html', '').replace('-', '_')}"
+        app.get(route_path, include_in_schema=False)(
+            build_console_handler(web_dir / filename, endpoint_name)
+        )
 
     return app
 
