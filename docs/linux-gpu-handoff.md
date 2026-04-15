@@ -38,6 +38,9 @@ uv run msr-api
 另开终端：
 
 ```bash
+curl -H "X-API-Key: $MSR_API_KEY" http://127.0.0.1:8011/api/v1/runtime/limits
+curl -H "X-API-Key: $MSR_API_KEY" http://127.0.0.1:8011/api/v1/runtime/tasks
+
 uv run python tools/smoke_api.py \
   --base-url http://127.0.0.1:8011 \
   --api-key "$MSR_API_KEY" \
@@ -79,6 +82,8 @@ uv run python tools/smoke_api.py \
 - 默认链路是否成功
 - 处理一段样例音频的总耗时
 - 显存峰值
+- `runtime/tasks` 中活跃任务数、排队任务数、最近任务摘要是否正常
+- 当前 `max_parallel_tasks`、`max_queued_tasks` 是否符合预期
 - 是否出现任何联网或模型校验行为
 
 ## 6. 如果默认链路失败

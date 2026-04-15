@@ -58,6 +58,9 @@ uv run msr-api
 - 控制台：`http://127.0.0.1:8011/`
 - 健康检查：`http://127.0.0.1:8011/health`
 
+Linux + NVIDIA GPU 验收步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
+示例音频目录结构说明见 [samples/README.md](samples/README.md)。
+
 ### 先注册模型，再显式加载
 
 模型注册来源于 `config/models.toml`。
