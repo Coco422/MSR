@@ -81,6 +81,9 @@ uv run msr-api
 Linux + NVIDIA GPU 验收步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
 示例音频目录结构说明见 [samples/README.md](samples/README.md)。
 
+代码目录采用标准 `src layout`：业务包位于 `src/msr/`。
+这层目录本身不是异常点；独立 venv 启动失败通常是因为 profile 环境没有装入项目包，或启动时没有把 `src/` 纳入 Python 搜索路径。
+
 ### 独立 venv 切换脚本
 
 如果你希望把 `speakerlab` 默认链和 `pyannote` 准确率优先链彻底隔离，可直接使用：
@@ -98,6 +101,7 @@ bash tools/runtime_env.sh setup pyannote
 - 如果要跑 `faster-whisper + pyannote`，不要直接执行 `uv run msr-api`
 - `uv run msr-api` 使用的是仓库默认 `.venv`，更适合默认链；准确率优先链请使用 `bash tools/runtime_env.sh run pyannote`
 - `tools/runtime_env.sh run/exec` 现在会显式切到对应 profile 的 Python，并补上 `PYTHONPATH=src`，不再依赖 profile 内一定存在 `msr-api` console script
+- `tools/runtime_env.sh setup ...` 现在可重复执行；若 profile venv 已存在会直接复用，不再弹交互确认
 
 常用命令：
 

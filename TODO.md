@@ -45,6 +45,7 @@
 - [x] `pyannote` 后端已兼容本地 `config.yaml` 加载、4.x `DiarizeOutput` 返回结构和内存 waveform 输入
 - [x] 已提供双 venv 切换脚本：默认链环境 / `faster-whisper + pyannote` 环境
 - [x] 双 venv 的 `setup/run/exec` 已修复并验证，profile 启动不再依赖缺失的 `msr-api` console script
+- [x] `runtime_env.sh setup ...` 已改为可重复执行，不再因已有 venv 弹交互确认
 - [x] 启动阶段、模型加载阶段、任务阶段日志已补强，可直接看到当前解释器/venv、模型路径和阶段流转
 - [x] `faster-whisper` / `pyannote` 缺依赖时会返回更明确的环境切换提示，不再只报裸 `ModuleNotFoundError`
 
