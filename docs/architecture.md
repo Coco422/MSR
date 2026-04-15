@@ -13,7 +13,7 @@ MSR keeps exactly two runtime model slots:
 
 Models are registered statically in `config/models.toml`, but they are not loaded during process startup. All loading and unloading happens through management APIs.
 
-The service is exposed upstream as a synchronous microservice, but internally it now maintains:
+The service is exposed upstream as both a compatibility synchronous API and a task-oriented asynchronous API. Internally it maintains:
 
 - bounded parallel execution slots
 - a bounded waiting queue
@@ -21,7 +21,7 @@ The service is exposed upstream as a synchronous microservice, but internally it
 
 ## Main request flow
 
-1. Client uploads audio to `POST /transcribe/`
+1. Client uploads audio to either `POST /transcribe/` or `POST /api/v1/transcriptions/submit`
 2. Service validates API key
 3. Service verifies that ASR and diarization backends are loaded
 4. Request is admitted into the runtime scheduler or rejected with `queue_full`
@@ -29,9 +29,10 @@ The service is exposed upstream as a synchronous microservice, but internally it
 6. Audio is normalized to mono 16 kHz
 7. WebRTC VAD produces coarse speech ranges
 8. Diarization backend analyzes the full audio
-9. Each VAD clip is sent through the active ASR backend
-10. ASR segments are matched to the diarization timeline by overlap
-11. Response is shaped to preserve the old demo contract
+9. Long VAD ranges are split into bounded ASR chunks to reduce peak GPU memory
+10. Each bounded ASR chunk is sent through the active ASR backend
+11. ASR segments are matched to the diarization timeline by overlap
+12. Response is shaped to preserve the old demo contract or persisted for async result retrieval
 
 ## Module boundaries
 

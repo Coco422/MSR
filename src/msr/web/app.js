@@ -96,11 +96,18 @@ function extractErrorMessage(payload, status) {
   if (!payload || typeof payload !== "object") {
     return `请求失败（HTTP ${status}）`;
   }
-  if (payload.code === "queue_full") {
-    return `队列已满：并发上限 ${payload.max_parallel_tasks}，排队上限 ${payload.max_queued_tasks}，当前运行 ${payload.active_tasks}，当前排队 ${payload.queued_tasks}`;
+  const detail = payload && typeof payload.detail === "object" ? payload.detail : payload;
+  if (detail.code === "queue_full") {
+    return `队列已满：并发上限 ${detail.max_parallel_tasks}，排队上限 ${detail.max_queued_tasks}，当前运行 ${detail.active_tasks}，当前排队 ${detail.queued_tasks}`;
+  }
+  if (detail.code === "cuda_oom") {
+    return `${detail.message}${detail.hint ? ` ${detail.hint}` : ""}`;
   }
   if (typeof payload.detail === "string") {
     return payload.detail;
+  }
+  if (typeof detail.message === "string") {
+    return detail.message;
   }
   if (typeof payload.error === "string") {
     return payload.error;
@@ -1412,7 +1419,7 @@ async function handleTranscribeSubmit(event) {
 
   setButtonBusy(button, true, "转写中...");
   if (hint) {
-    hint.textContent = "正在上传音频并等待同步转写响应，请稍候。";
+    hint.textContent = "正在上传音频并等待同步转写响应，请稍候。若是长音频，建议改走异步任务接口。";
   }
 
   try {

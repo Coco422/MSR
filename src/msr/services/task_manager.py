@@ -5,6 +5,7 @@ from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 import time
 from threading import RLock
@@ -16,6 +17,7 @@ from msr.core.errors import QueueFullError, TranscriptionError
 
 TaskProgressCallback = Callable[[str, str | None], None]
 TaskRunner = Callable[[TaskProgressCallback], dict[str, Any]]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -58,7 +60,12 @@ class TaskManager:
 
     async def start(self) -> None:
         self.settings.runtime.data_dir.mkdir(parents=True, exist_ok=True)
+        self.settings.runtime.task_results_dir.mkdir(parents=True, exist_ok=True)
         self._loop = asyncio.get_running_loop()
+        with self._lock:
+            self._trim_recent_locked()
+            self._persist_recent_tasks_locked()
+            self._prune_result_files_locked()
 
     async def shutdown(self) -> None:
         with self._lock:
@@ -71,6 +78,15 @@ class TaskManager:
                 job.future.set_exception(TranscriptionError("Task manager is shutting down."))
 
     async def submit(self, task_id: str, filename: str, runner: TaskRunner) -> dict[str, Any]:
+        job = await self._submit_job(task_id=task_id, filename=filename, runner=runner)
+        return await job.future
+
+    async def submit_async(self, task_id: str, filename: str, runner: TaskRunner) -> dict[str, Any]:
+        job = await self._submit_job(task_id=task_id, filename=filename, runner=runner)
+        detail = self.task_detail(task_id)
+        return detail or self._record_detail(job.record, result_available=False)
+
+    async def _submit_job(self, task_id: str, filename: str, runner: TaskRunner) -> TaskJob:
         loop = asyncio.get_running_loop()
         if self._loop is None:
             self._loop = loop
@@ -107,7 +123,8 @@ class TaskManager:
 
         if should_drain:
             self._drain_queue()
-        return await job.future
+        logger.info("Task %s accepted for %s with status=%s", task_id, filename, job.record.status)
+        return job
 
     def limits_snapshot(self) -> dict[str, int]:
         with self._lock:
@@ -133,6 +150,31 @@ class TaskManager:
                 "recent": recent,
             }
 
+    def task_detail(self, task_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            record = self._find_record_locked(task_id)
+            if not record:
+                return None
+            return self._record_detail(record, result_available=self._result_path(task_id).exists())
+
+    def task_result(self, task_id: str) -> tuple[TaskRecord | None, dict[str, Any] | None]:
+        with self._lock:
+            record = self._find_record_locked(task_id)
+            if not record:
+                return None, None
+            result_path = self._result_path(task_id)
+
+        if not result_path.exists():
+            return record, None
+
+        try:
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return record, None
+        if not isinstance(payload, dict):
+            return record, None
+        return record, payload
+
     def inflight_count(self) -> int:
         with self._lock:
             return len(self._active) + len(self._pending)
@@ -152,6 +194,8 @@ class TaskManager:
             if recent_task_limit is not None:
                 self.settings.runtime.recent_task_limit = recent_task_limit
                 self._trim_recent_locked()
+                self._persist_recent_tasks_locked()
+                self._prune_result_files_locked()
             self._persist_runtime_overrides_locked()
 
         if self._loop and self._loop.is_running():
@@ -173,10 +217,18 @@ class TaskManager:
             result = await asyncio.to_thread(job.runner, self._build_progress_callback(job.record.task_id))
         except Exception as exc:
             self._mark_failed(job, exc)
+            self._delete_result_file(job.record.task_id)
+            logger.exception(
+                "Task %s failed at stage=%s filename=%s",
+                job.record.task_id,
+                job.record.stage,
+                job.record.filename,
+            )
             if not job.future.done():
                 job.future.set_exception(exc)
         else:
             self._mark_completed(job, result)
+            self._persist_result(job.record.task_id, result)
             if not job.future.done():
                 job.future.set_result(result)
         finally:
@@ -186,6 +238,7 @@ class TaskManager:
                 self._recent.insert(0, job.record)
                 self._trim_recent_locked()
                 self._persist_recent_tasks_locked()
+                self._prune_result_files_locked()
 
             self._drain_queue()
 
@@ -198,6 +251,12 @@ class TaskManager:
                 job.record.run_ms = int((time.perf_counter() - job.started_monotonic) * 1000)
             job.record.audio_duration = result.get("audio_duration")
             job.record.error = None
+            logger.info(
+                "Task %s completed queue_wait_ms=%s run_ms=%s",
+                job.record.task_id,
+                job.record.queue_wait_ms,
+                job.record.run_ms,
+            )
 
     def _mark_failed(self, job: TaskJob, exc: Exception) -> None:
         with self._lock:
@@ -236,6 +295,23 @@ class TaskManager:
         if len(self._recent) > limit:
             del self._recent[limit:]
 
+    def _record_detail(self, record: TaskRecord, *, result_available: bool) -> dict[str, Any]:
+        payload = record.to_dict()
+        payload["result_available"] = result_available
+        return payload
+
+    def _find_record_locked(self, task_id: str) -> TaskRecord | None:
+        active = self._active.get(task_id)
+        if active:
+            return active.record
+        for job in self._pending:
+            if job.record.task_id == task_id:
+                return job.record
+        for record in self._recent:
+            if record.task_id == task_id:
+                return record
+        return None
+
     def _persist_runtime_overrides_locked(self) -> None:
         path = self.settings.runtime.override_path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +329,21 @@ class TaskManager:
         payload = [record.to_dict() for record in self._recent]
         try:
             path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            return
+
+    def _persist_result(self, task_id: str, result: dict[str, Any]) -> None:
+        path = self._result_path(task_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            return
+
+    def _delete_result_file(self, task_id: str) -> None:
+        path = self._result_path(task_id)
+        try:
+            path.unlink(missing_ok=True)
         except OSError:
             return
 
@@ -292,6 +383,22 @@ class TaskManager:
             except KeyError:
                 continue
         return items[: self.settings.runtime.recent_task_limit]
+
+    def _prune_result_files_locked(self) -> None:
+        results_dir = self.settings.runtime.task_results_dir
+        if not results_dir.exists():
+            return
+        keep_ids = {record.task_id for record in self._recent if record.status == "completed"}
+        for result_path in results_dir.glob("*.json"):
+            if result_path.stem in keep_ids:
+                continue
+            try:
+                result_path.unlink()
+            except OSError:
+                continue
+
+    def _result_path(self, task_id: str) -> Path:
+        return self.settings.runtime.task_result_path(task_id)
 
     def _queue_full_detail_locked(self) -> dict[str, Any]:
         return {

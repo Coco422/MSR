@@ -49,7 +49,7 @@ class WebConfig:
 class RuntimeConfig:
     max_parallel_tasks: int = 1
     max_queued_tasks: int = 2
-    recent_task_limit: int = 20
+    recent_task_limit: int = 50
     data_dir: Path = Path("data")
 
     @property
@@ -59,6 +59,13 @@ class RuntimeConfig:
     @property
     def recent_tasks_path(self) -> Path:
         return self.data_dir / "recent_tasks.json"
+
+    @property
+    def task_results_dir(self) -> Path:
+        return self.data_dir / "task_results"
+
+    def task_result_path(self, task_id: str) -> Path:
+        return self.task_results_dir / f"{task_id}.json"
 
 
 @dataclass(slots=True)
@@ -163,7 +170,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
         runtime=RuntimeConfig(
             max_parallel_tasks=_read_int(runtime_section, "max_parallel_tasks", 1, minimum=1),
             max_queued_tasks=_read_int(runtime_section, "max_queued_tasks", 2, minimum=0),
-            recent_task_limit=_read_int(runtime_section, "recent_task_limit", 20, minimum=1),
+            recent_task_limit=_read_int(runtime_section, "recent_task_limit", 50, minimum=1),
             data_dir=data_dir,
         ),
         models=models,

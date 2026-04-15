@@ -12,6 +12,7 @@
 - [x] 根目录 `MSR` 工程初始化完成
 - [x] `FastAPI + HTML/JS/CSS + uv + Docker` 基础骨架完成
 - [x] `/transcribe/` 与 `/health` 兼容接口完成
+- [x] 异步任务接口完成：提交、状态查询、结果拉取
 - [x] 管理接口完成：`auth/check`、`models`、`runtime/active`、`system/resources`
 - [x] ASR 后端骨架完成：`FunASR`、`faster-whisper`
 - [x] diarization 后端骨架完成：`3D-Speaker`、`pyannote`
@@ -22,6 +23,7 @@
 - [x] GUI 已升级为多页后台式管理台：总览中心、模型管理、运行控制、转写示例
 - [x] GUI 已补页面内成功/失败提示条与最近刷新时间，不再依赖弹窗反馈
 - [x] 模型目录切换为仓库内相对路径 `models/`
+- [x] `recent_tasks` 与异步结果文件已按 `recent_task_limit` 自动裁剪，当前默认保留 `50` 条
 - [x] README、architecture、roadmap、doctor 已补齐
 - [x] 基础测试通过：`uv run --extra dev pytest`
 - [x] 在真实 Linux + NVIDIA GPU 环境验证默认链路可用
@@ -54,6 +56,7 @@
 - [ ] 记录默认链在真实 GPU 环境下的显存峰值，而不只是加载后常驻占用
 - [ ] 补一份“本轮真机验证纪要”到 `docs/`，沉淀环境和问题修复点
 - [ ] 继续优化 `FunASR + 3D-Speaker` 在多人短句场景下的切句质量，减少“嗯/哦”等极短片段
+- [ ] 评估是否要把同步示例页也升级成“同步/异步双模式”联调页面
 - [ ] 继续收敛默认链加载日志，评估是否要压低 `modelscope` / `datasets` 的纯信息级噪声
 - [ ] 收敛 `pyannote.audio` 导入时的 `torchcodec` 警告，决定是补系统 FFmpeg 兼容层还是显式屏蔽无害告警
 - [ ] 梳理 `speakerlab` 与 `pyannote 4.x` 的 `numpy` 依赖冲突，决定是否拆分 extra、拆容器或保留手工补装方案

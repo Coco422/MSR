@@ -65,6 +65,10 @@ class RuntimeTaskRecord(BaseModel):
     error: str | None = None
 
 
+class TaskStatusResponse(RuntimeTaskRecord):
+    result_available: bool = False
+
+
 class RuntimeTaskCounts(BaseModel):
     active: int
     queued: int

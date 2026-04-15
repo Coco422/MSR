@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import logging
 import re
 import shutil
 from pathlib import Path
@@ -22,9 +23,11 @@ from msr.services.model_manager import ModelManager
 
 ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
 TOKEN_GROUP_PAUSE_SECONDS = 0.4
+MAX_ASR_CHUNK_SECONDS = 20.0
 CJK_RANGES = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
 CHINESE_PUNCTUATION = "，。！？；：、“”‘’（）《》〈〉【】—…·"
 StageCallback = Callable[[str, str | None], None]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -84,6 +87,7 @@ class TranscriptionService:
         progress_callback: StageCallback | None = None,
     ) -> dict:
         started_at = time.perf_counter()
+        logger.info("Task %s started for %s", prepared.task_id, prepared.original_filename)
 
         def update_stage(stage: str, audio_duration: str | None = None) -> None:
             if progress_callback:
@@ -99,6 +103,14 @@ class TranscriptionService:
             vad_ranges = self.vad.detect(audio, sample_rate)
             if not vad_ranges:
                 raise InvalidAudioError("No speech activity detected.")
+            asr_ranges = _split_ranges_for_asr(vad_ranges, MAX_ASR_CHUNK_SECONDS)
+            if len(asr_ranges) != len(vad_ranges):
+                logger.info(
+                    "Task %s split %s VAD ranges into %s ASR chunks to limit peak memory",
+                    prepared.task_id,
+                    len(vad_ranges),
+                    len(asr_ranges),
+                )
 
             diarization_backend = self.model_manager.get_diarization_backend()
             asr_backend = self.model_manager.get_asr_backend()
@@ -110,7 +122,7 @@ class TranscriptionService:
 
             update_stage("asr", audio_duration)
             text_segments: list[TextSegment] = []
-            for start, end in vad_ranges:
+            for start, end in asr_ranges:
                 clip = write_clip(audio, sample_rate, start, end, prepared.task_dir)
                 for segment in asr_backend.transcribe(clip.path, language=prepared.language, timestamps=True):
                     segment_start = max(0.0, start + segment.start)
@@ -136,6 +148,12 @@ class TranscriptionService:
 
         processing_seconds = max(time.perf_counter() - started_at, 0.0)
         processing_speed = audio_duration_seconds / processing_seconds if processing_seconds > 0 else 0.0
+        logger.info(
+            "Task %s completed in %.2fs for %s of audio",
+            prepared.task_id,
+            processing_seconds,
+            audio_duration,
+        )
 
         return {
             "task_id": prepared.task_id,
@@ -147,6 +165,25 @@ class TranscriptionService:
             "processing_time": _format_duration(processing_seconds),
             "processing_speed": f"{processing_speed:.2f}x",
         }
+
+
+def _split_ranges_for_asr(
+    ranges: list[tuple[float, float]],
+    max_chunk_seconds: float,
+) -> list[tuple[float, float]]:
+    if max_chunk_seconds <= 0:
+        return list(ranges)
+
+    chunks: list[tuple[float, float]] = []
+    for start, end in ranges:
+        current = start
+        while end - current > max_chunk_seconds:
+            chunk_end = current + max_chunk_seconds
+            chunks.append((current, chunk_end))
+            current = chunk_end
+        if end > current:
+            chunks.append((current, end))
+    return chunks
 
 
 def _match_text_to_speakers(text_segments: list[TextSegment], speaker_segments: list[SpeakerSegment]) -> dict[str, list[TextSegment]]:

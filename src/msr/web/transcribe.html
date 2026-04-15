@@ -20,7 +20,7 @@
           <div>
             <p class="brand-kicker">MSR 管理中台</p>
             <h1>服务管理控制台</h1>
-            <p>提供同步转写接口的管理示例与结果观察。</p>
+            <p>提供同步转写示例，并提示长音频改走异步任务接口。</p>
           </div>
         </section>
 
@@ -79,7 +79,7 @@
           <div class="sidebar-card stack">
             <div>
               <h2>接入凭证</h2>
-              <p class="meta-note">同步转写示例会直接调用对外主入口，用于联调与管理验证。</p>
+              <p class="meta-note">当前页面仍调用同步主入口做联调示例，长音频生产接入建议改走异步任务接口。</p>
             </div>
             <div class="field">
               <label for="apiKey">API 密钥</label>
@@ -99,7 +99,7 @@
         <section class="side-section">
           <div class="sidebar-card">
             <h2>接口定位</h2>
-            <p class="meta-note">这里是同步接口示例页，便于验证模型、资源和任务控制是否协同正常，不是终端客户前台。</p>
+            <p class="meta-note">这里是同步接口示例页，便于验证模型、资源和任务控制是否协同正常；真正长音频生产流量建议使用异步任务接口。</p>
           </div>
         </section>
       </aside>
@@ -127,7 +127,7 @@
               <p class="page-kicker">转写示例</p>
               <h2>同步转写联调页面</h2>
               <p class="page-summary">
-                页面会以管理视图的方式展示转写结果、说话人统计和基础处理指标，避免直接输出整段 JSON，便于更直观地判断结果是否可用于上游集成。
+                页面会以管理视图展示同步转写结果、说话人统计和基础处理指标，避免直接输出整段 JSON。若是长音频或批量任务，请改用异步任务接口。
               </p>
             </div>
             <div class="page-callout panel">
@@ -226,7 +226,7 @@
                   </span>
                   <div>
                     <h3>提交音频</h3>
-                    <p>调用同步 <span class="mono">/transcribe/</span> 进行联调。</p>
+                    <p>调用同步 <span class="mono">/transcribe/</span> 进行联调；长音频建议改用异步任务接口。</p>
                   </div>
                 </div>
               </div>
@@ -268,6 +268,7 @@
                 <li>“逐段转写”按时间线展示文本、说话人与起止时间。</li>
                 <li>“说话人统计”会汇总每位说话人的累计时长与片段数。</li>
                 <li>顶部 4 个指标会同步展示模型就绪情况、队列压力与最近处理速度。</li>
+                <li>若音频较长，请优先使用接口文档中的异步任务提交与结果查询接口。</li>
                 <li>失败时会在本页显示结构化错误信息，而不是整段原始异常体。</li>
               </ul>
             </section>

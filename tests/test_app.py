@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from pathlib import Path
 import threading
 import time
@@ -22,6 +23,7 @@ from msr.services.transcription_service import (
     _build_speakers_info,
     _build_transcripts,
     _match_text_to_speakers,
+    _split_ranges_for_asr,
 )
 
 
@@ -267,6 +269,80 @@ def test_transcribe_silence_returns_400(tmp_path: Path):
         )
         assert response.status_code == 400
         assert "No speech activity detected" in response.json()["detail"]
+
+
+def test_async_transcription_endpoints_return_status_and_result(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(
+        tmp_path,
+        max_parallel_tasks=1,
+        max_queued_tasks=1,
+        asr_options={"sleep_per_second": 0.2},
+    ) as client:
+        load_models(client, headers)
+
+        submit = client.post(
+            "/api/v1/transcriptions/submit",
+            headers=headers,
+            files={"audio": ("async.wav", make_audio_bytes(seconds=1.0), "audio/wav")},
+        )
+        assert submit.status_code == 200
+        task_id = submit.json()["task_id"]
+
+        status = client.get(f"/api/v1/transcriptions/{task_id}", headers=headers)
+        assert status.status_code == 200
+        assert status.json()["task_id"] == task_id
+
+        deadline = time.time() + 5.0
+        result_response = None
+        while time.time() < deadline:
+            result_response = client.get(f"/api/v1/transcriptions/{task_id}/result", headers=headers)
+            if result_response.status_code == 200:
+                break
+            assert result_response.status_code == 202
+            time.sleep(0.05)
+
+        assert result_response is not None
+        assert result_response.status_code == 200
+        assert result_response.json()["status"] == "completed"
+        assert result_response.json()["task_id"] == task_id
+
+
+def test_task_results_are_trimmed_with_recent_limit(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    with build_client(
+        tmp_path,
+        max_parallel_tasks=1,
+        max_queued_tasks=0,
+        recent_task_limit=2,
+    ) as client:
+        load_models(client, headers)
+
+        for index in range(3):
+            response = client.post(
+                "/api/v1/transcriptions/submit",
+                headers=headers,
+                files={"audio": (f"task-{index}.wav", make_audio_bytes(seconds=0.5), "audio/wav")},
+            )
+            assert response.status_code == 200
+            task_id = response.json()["task_id"]
+
+            deadline = time.time() + 5.0
+            result = None
+            while time.time() < deadline:
+                result = client.get(f"/api/v1/transcriptions/{task_id}/result", headers=headers)
+                if result.status_code == 200:
+                    break
+                time.sleep(0.05)
+            assert result is not None
+            assert result.status_code == 200
+
+        recent_path = tmp_path / "data" / "recent_tasks.json"
+        recent_payload = json.loads(recent_path.read_text(encoding="utf-8"))
+        assert len(recent_payload) == 2
+
+        results_dir = tmp_path / "data" / "task_results"
+        assert len(list(results_dir.glob("*.json"))) == 2
 
 
 def test_queue_full_returns_503(tmp_path: Path):
@@ -522,6 +598,15 @@ def test_match_text_to_speakers_splits_token_runs_on_speaker_boundaries():
 
     assert [segment.text for segment in speaker_texts["1"]] == ["然后我还想吃汉堡包"]
     assert [segment.text for segment in speaker_texts["4"]] == ["辣辣辣"]
+
+
+def test_split_ranges_for_asr_limits_chunk_length():
+    assert _split_ranges_for_asr([(0.0, 45.0), (50.0, 55.0)], 20.0) == [
+        (0.0, 20.0),
+        (20.0, 40.0),
+        (40.0, 45.0),
+        (50.0, 55.0),
+    ]
 
 
 def test_funasr_load_disables_update_check_by_default(monkeypatch, tmp_path: Path):

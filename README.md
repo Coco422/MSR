@@ -14,6 +14,7 @@ MSR 的目标是把旧 demo 重构成一个真正适合长期维护的服务：
 - 支持模型 load / unload
 - 支持资源监控
 - 支持同步接口下的有界并行与有界排队
+- 支持异步任务提交、状态查询和结果拉取
 - 保留旧的 `/transcribe/` 响应结构，降低下游改造成本
 
 ## 2. 核心能力
@@ -147,7 +148,7 @@ uv run python tools/bootstrap_models.py --include-alternates --hf-token "$HF_TOK
 - `web.resource_refresh_seconds`：前端轮询周期
 - `runtime.max_parallel_tasks`：最大并行处理量
 - `runtime.max_queued_tasks`：最大排队量
-- `runtime.recent_task_limit`：最近任务摘要保留数
+- `runtime.recent_task_limit`：最近任务摘要和异步结果保留数，默认 `50`
 - `runtime.data_dir`：运行时覆盖配置和最近任务摘要的本地目录
 
 ### `config/models.toml`
@@ -198,6 +199,11 @@ uv run python tools/bootstrap_models.py --include-alternates --hf-token "$HF_TOK
 
 兼容旧 demo 的 multipart 上传接口。
 
+定位说明：
+
+- 该接口保持同步返回，便于兼容旧上游
+- 长音频或高并发场景更建议使用异步任务接口，避免被网关、浏览器或上游 SDK 超时截断
+
 请求：
 
 - `audio`: 文件，支持 `wav/mp3/ogg/flac/m4a`
@@ -218,6 +224,21 @@ uv run python tools/bootstrap_models.py --include-alternates --hf-token "$HF_TOK
 - 只对有有效 ASR 文本片段的说话人生成 `speakers_info` 和 `total_speakers`
 - 返回中的 `speaker_id` / `speaker_label` 会按有效说话人的出现顺序重新编号为 `0/A`、`1/B`、`2/C`
 - 当 `FunASR` 提供词级时间戳时，服务会先按词级时间与 diarization 边界做归属，再拼回最终文本段，减少句尾串到相邻说话人的情况
+
+当同步转写发生显存不足时，服务会返回 `507`，错误体带 `cuda_oom` 机器码和建议说明。
+
+### 异步任务接口
+
+- `POST /api/v1/transcriptions/submit`
+- `GET /api/v1/transcriptions/{task_id}`
+- `GET /api/v1/transcriptions/{task_id}/result`
+
+行为约定：
+
+- `submit` 只负责接单入队，立即返回 `task_id`
+- `status` 返回当前阶段、排队等待时间、运行耗时和结果是否可取
+- `result` 在任务未完成时返回 `202`，失败时返回 `409`，成功时返回与 `/transcribe/` 相同的兼容结果结构
+- 最近任务摘要和异步结果文件都会按 `runtime.recent_task_limit` 自动裁剪，默认只保留 `50` 条
 
 ### 管理接口
 
@@ -252,6 +273,7 @@ uv run python tools/bootstrap_models.py --include-alternates --hf-token "$HF_TOK
 - 左侧固定导航 + 主内容独立滚动，适合高信息密度管理视图
 - 顶部搜索框、页面级操作按钮、导航高亮、基础筛选按钮和 Tab 切换
 - 模型加载 / 卸载、运行控制保存、同步转写提交都带等待响应的忙碌态
+- 长音频生产接入建议优先走异步任务接口，控制台中的同步页仅保留为兼容联调示例
 - 页面内成功 / 失败提示条与最近刷新时间会在操作完成后同步更新，不再依赖弹窗提示
 - 原始 JSON 已收敛为仪表盘、状态卡片、任务列表、时间线和说话人统计
 
