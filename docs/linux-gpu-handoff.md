@@ -30,10 +30,16 @@ uv run python tools/bootstrap_models.py
 uv run python tools/doctor.py
 ```
 
+说明：
+
+- `default-runtime` 会锁定 `torch 2.10 / torchaudio 2.10 / torchvision 0.25`，优先适配 CUDA 12.8 驱动
+- `tools/doctor.py` 默认只检查主链默认模型
+
 如果要同时验证备选链路 `faster-whisper + pyannote`，再补一轮：
 
 ```bash
 uv sync --extra dev --extra gpu-runtime
+uv run python tools/doctor.py --include-alternates
 ```
 
 ## 3. 本地服务方式

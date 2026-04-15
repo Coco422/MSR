@@ -22,24 +22,48 @@ dependencies = [
 default-runtime = [
   "funasr>=1.2.0",
   "speakerlab",
+  "addict>=2.4.0,<3.0.0",
+  "simplejson>=3.20.0,<4.0.0",
+  "sortedcontainers>=2.4.0,<3.0.0",
+  "torch==2.10.*",
+  "torchaudio==2.10.*",
+  "torchvision==0.25.*",
 ]
 funasr = [
   "funasr>=1.2.0",
+  "torch==2.10.*",
+  "torchaudio==2.10.*",
+  "torchvision==0.25.*",
 ]
 faster-whisper = [
   "faster-whisper>=1.1.0",
 ]
 3d-speaker = [
   "speakerlab",
+  "addict>=2.4.0,<3.0.0",
+  "simplejson>=3.20.0,<4.0.0",
+  "sortedcontainers>=2.4.0,<3.0.0",
+  "torch==2.10.*",
+  "torchaudio==2.10.*",
+  "torchvision==0.25.*",
 ]
 pyannote = [
   "pyannote.audio>=3.1.0",
+  "torch==2.10.*",
+  "torchaudio==2.10.*",
+  "torchvision==0.25.*",
 ]
 gpu-runtime = [
   "funasr>=1.2.0",
   "faster-whisper>=1.1.0",
   "speakerlab",
   "pyannote.audio>=3.1.0",
+  "addict>=2.4.0,<3.0.0",
+  "simplejson>=3.20.0,<4.0.0",
+  "sortedcontainers>=2.4.0,<3.0.0",
+  "torch==2.10.*",
+  "torchaudio==2.10.*",
+  "torchvision==0.25.*",
 ]
 dev = [
   "httpx>=0.27.0,<1.0.0",

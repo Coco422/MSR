@@ -55,6 +55,7 @@
 - [ ] 根据真实 GPU 环境决定是否固定 Python 3.11
 - [ ] 根据真实模型准备方式决定是否保留 `gpu-runtime` 全量 extra
 - [x] 增加 `default-runtime` extra，避免默认链路首次部署就安装全量备选后端
+- [x] 将默认 GPU 依赖固定到 CUDA 12 兼容的 PyTorch 2.10 系列
 - [ ] 确认是否需要拆 `Dockerfile.gpu` 和 `Dockerfile.gpu.slim`
 - [ ] 评估 `/transcribe/` 是否要补 `speaker_count_hint` 等可选参数
 - [ ] 设计 speaker registry：保存说话人声纹特征并支持跨音频识别同一人

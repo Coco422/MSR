@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -12,15 +13,37 @@ if str(SRC) not in sys.path:
 from msr.core.config import load_settings
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Validate local model directories for MSR.")
+    parser.add_argument(
+        "--include-alternates",
+        action="store_true",
+        help="Also validate non-default configured models.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     settings = load_settings(project_root=ROOT)
+    checked_models = [
+        model for model in settings.models if model.default or args.include_alternates
+    ]
     print("MSR doctor")
     print(f"Project root: {settings.project_root}")
     print(f"Strict offline: {settings.app.strict_offline}")
     print(f"Configured models: {len(settings.models)}")
+    print(f"Checking models: {len(checked_models)}")
+    print(f"Include alternates: {args.include_alternates}")
 
     has_error = False
     for model in settings.models:
+        if model not in checked_models:
+            print(
+                f"[SKIP] kind={model.kind} id={model.id} backend={model.backend} "
+                "reason=alternate"
+            )
+            continue
         local_path = model.local_path
         is_remote_like = "://" in str(local_path)
         exists = local_path.exists()

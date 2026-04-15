@@ -57,6 +57,7 @@ uv run msr-api
 
 - `default-runtime`：默认主链 `FunASR + 3D-Speaker + WebRTC VAD`
 - `gpu-runtime`：包含默认链路和备选链路 `faster-whisper + pyannote`
+- Linux + NVIDIA 环境默认锁定 `torch 2.10 / torchaudio 2.10 / torchvision 0.25`，避免 CUDA 12.8 驱动误拉到 `cu130`
 
 默认访问：
 
@@ -74,6 +75,13 @@ Linux + NVIDIA GPU 验收步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-ha
 
 ```bash
 uv run python tools/bootstrap_models.py
+uv run python tools/doctor.py
+```
+
+如果要把备选链路也纳入校验：
+
+```bash
+uv run python tools/doctor.py --include-alternates
 ```
 
 启动服务后：
