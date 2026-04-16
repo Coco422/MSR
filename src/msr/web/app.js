@@ -801,6 +801,29 @@ function renderModelsMetrics(models, runtime) {
     : "默认主链尚未完全加载";
 }
 
+function modelOperationLabel(status) {
+  if (status === "loading") {
+    return "加载中...";
+  }
+  if (status === "unloading") {
+    return "卸载中...";
+  }
+  return null;
+}
+
+function describeModelAvailability(model) {
+  if (!model.enabled) {
+    return "模型已禁用";
+  }
+  if (!model.path_exists) {
+    return "路径缺失";
+  }
+  if (model.default) {
+    return "默认链模型";
+  }
+  return "备选模型";
+}
+
 function renderModelRows(models) {
   const target = $("#modelsTableBody");
   if (!target) {
@@ -815,35 +838,45 @@ function renderModelRows(models) {
     return;
   }
 
+  const hasOperation = models.some((model) => Boolean(model.operation_status));
   target.innerHTML = models
     .map((model) => {
       const action = model.loaded ? "unload" : "load";
-      const actionLabel = model.loaded ? "卸载模型" : "加载模型";
+      const operationLabel = modelOperationLabel(model.operation_status);
+      const disabledLabel = !model.enabled ? "模型已禁用" : !model.path_exists ? "路径缺失" : null;
+      const actionLabel = operationLabel || disabledLabel || (model.loaded ? "卸载模型" : "加载模型");
+      const isBlockedByOperation = hasOperation && !model.operation_status;
+      const disableAction = Boolean(operationLabel || disabledLabel || isBlockedByOperation);
       const tags = [
         model.kind,
         model.loaded ? "loaded" : "idle",
         model.path_exists ? "path-ok" : "path-missing",
         model.default ? "default" : "optional",
+        model.enabled ? "enabled" : "disabled",
       ].join(" ");
+      const runtimeBadge = model.operation_status
+        ? renderStatusBadge(model.operation_status === "loading" ? "加载中" : "卸载中", "warn")
+        : renderStatusBadge(model.loaded ? "已加载" : model.enabled ? "未加载" : "已禁用", model.loaded ? "ok" : model.enabled ? "warn" : "danger");
       return `
         <tr data-search="${escapeHtml(model.id)} ${escapeHtml(model.backend)} ${escapeHtml(model.device)} ${escapeHtml(model.local_path)} ${escapeHtml(kindLabel(model.kind))}" data-tags="${escapeHtml(tags)}">
           <td>
             <span class="table-title">${escapeHtml(model.id)}</span>
-            <span class="table-note">${model.default ? "默认链模型" : "备选模型"}</span>
+            <span class="table-note">${escapeHtml(describeModelAvailability(model))}</span>
           </td>
           <td>${renderStatusBadge(kindLabel(model.kind), "neutral")}</td>
           <td>${escapeHtml(model.backend)}</td>
           <td>${escapeHtml(model.device)}</td>
           <td>${renderStatusBadge(model.path_exists ? "路径正常" : "路径缺失", model.path_exists ? "ok" : "danger")}</td>
-          <td>${renderStatusBadge(model.loaded ? "已加载" : "未加载", model.loaded ? "ok" : "warn")}</td>
+          <td>${runtimeBadge}</td>
           <td class="mono">${escapeHtml(model.local_path)}</td>
           <td>
             <button
-              class="button model-action ${model.loaded ? "" : "is-primary"}"
+              class="button model-action ${model.loaded ? "" : "is-primary"}${model.operation_status ? " is-busy" : ""}"
               type="button"
               data-kind="${escapeHtml(model.kind)}"
               data-id="${escapeHtml(model.id)}"
               data-action="${escapeHtml(action)}"
+              ${disableAction ? "disabled" : ""}
             >
               ${escapeHtml(actionLabel)}
             </button>
@@ -1232,6 +1265,14 @@ async function refreshModelsPage() {
   renderModelsMetrics(data.models, data.runtime);
   renderModelRows(data.models);
   renderModelsMatrix(data.models);
+  const activeOperation = Array.isArray(data.models) ? data.models.find((model) => model.operation_status) : null;
+  if (activeOperation) {
+    showPageMessage(
+      "模型操作进行中",
+      `${activeOperation.id} 正在${activeOperation.operation_status === "loading" ? "加载" : "卸载"}，其他模型按钮已暂时锁定。`,
+      "warn"
+    );
+  }
   hydrateUiSurface();
   markPageRefreshed();
 }
@@ -1383,8 +1424,16 @@ async function handleModelAction(button) {
   const kind = button.dataset.kind;
   const modelId = button.dataset.id;
   const busyText = action === "load" ? "加载中..." : "卸载中...";
+  const peerButtons = $$(".model-action").filter((item) => item !== button);
 
+  peerButtons.forEach((item) => {
+    if (!item.dataset.baseDisabled) {
+      item.dataset.baseDisabled = item.disabled ? "1" : "0";
+    }
+    item.disabled = true;
+  });
   setButtonBusy(button, true, busyText);
+  showPageMessage("模型操作已提交", `${modelId} 正在${action === "load" ? "加载" : "卸载"}，请等待接口响应。`, "warn");
   try {
     await requestJson(`/api/v1/models/${kind}/${modelId}/${action}`, { method: "POST" });
     await refreshModelsPage();
@@ -1395,6 +1444,9 @@ async function handleModelAction(button) {
   } catch (error) {
     showPageMessage("模型操作失败", error.message, "danger");
   } finally {
+    peerButtons.forEach((item) => {
+      item.disabled = item.dataset.baseDisabled === "1";
+    });
     setButtonBusy(button, false, action === "load" ? "加载模型" : "卸载模型");
   }
 }
