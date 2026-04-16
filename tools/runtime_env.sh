@@ -15,7 +15,7 @@ MSR 运行环境切换脚本
   bash tools/runtime_env.sh help
 
 说明:
-  default   : FunASR + 3D-Speaker + WebRTC VAD，偏兼容与当前默认链
+  default   : faster-whisper + 3D-Speaker + WebRTC VAD，当前默认链
   pyannote  : faster-whisper + pyannote，偏准确率优先
   qwen      : Qwen3-ASR + 3D-Speaker + 本地 vLLM + ForcedAligner，偏实验性 accuracy-first
   注意      : 需要切换到 pyannote 链路时，不要直接执行 uv run msr-api
@@ -70,12 +70,12 @@ create_default_env() {
   uv venv --allow-existing --python "${PYTHON_BIN}" "${dir}"
   echo "[default] 安装项目基础依赖: dev"
   uv pip install --python "${python}" -e ".[dev]"
-  echo "[default] 安装 torch / FunASR / 3D-Speaker 运行栈"
+  echo "[default] 安装 torch / faster-whisper / 3D-Speaker 运行栈"
   uv pip install --python "${python}" \
     "torch==2.10.*" \
     "torchaudio==2.10.*" \
     "torchvision==0.25.*" \
-    "funasr>=1.2.0" \
+    "faster-whisper>=1.1.0,<2.0.0" \
     "speakerlab" \
     "addict>=2.4.0,<3.0.0" \
     "simplejson>=3.20.0,<4.0.0" \

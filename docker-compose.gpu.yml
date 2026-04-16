@@ -14,6 +14,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./models:/app/models:ro
+      - ./data:/app/data
     deploy:
       resources:
         reservations:

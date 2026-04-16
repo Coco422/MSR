@@ -41,7 +41,9 @@ RUN uv pip install --python /opt/venv/bin/python \
     --index-url https://download.pytorch.org/whl/cu124 \
     torch torchaudio
 
-RUN uv sync --locked --extra gpu-runtime
+RUN mkdir -p /app/data /app/tmp
+
+RUN uv sync --locked --extra default-runtime
 
 EXPOSE 8011
 

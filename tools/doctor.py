@@ -35,7 +35,7 @@ def main() -> int:
         model
         for model in settings.models
         if model.default
-        or (args.include_alternates and model.backend in {"faster_whisper", "pyannote"})
+        or (args.include_alternates and model.backend in {"funasr", "faster_whisper", "pyannote"})
         or (args.include_qwen and model.backend == "qwen_asr")
     ]
     print("MSR doctor")

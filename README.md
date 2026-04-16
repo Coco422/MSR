@@ -62,12 +62,12 @@ uv run msr-api
 
 说明：
 
-- `default-runtime`：默认主链 `FunASR + 3D-Speaker + WebRTC VAD`
-- `gpu-runtime`：包含默认链路和备选链路 `faster-whisper + pyannote`
-- 当前测试倾向：若优先识别准确率，`faster-whisper` 比 `paraformer` 更稳，建议作为 accuracy-first 方案优先评估
+- `default-runtime`：默认主链 `faster-whisper + 3D-Speaker + WebRTC VAD`
+- `gpu-runtime`：保留为全量实验依赖集，但当前不再作为默认容器或默认 venv 方案
+- 当前默认链已切到 `faster-whisper + 3D-Speaker`，原因是它在现阶段的真实测试里更稳、更准，也更适合先恢复服务
 - Linux + NVIDIA 环境默认锁定 `torch 2.10 / torchaudio 2.10 / torchvision 0.25`，避免 CUDA 12.8 驱动误拉到 `cu130`
 - `pyannote-community-1` 备选链要求 `pyannote.audio 4.x`
-- 当前真实验证采用 `uv sync --extra dev --extra default-runtime` 后，再用 `uv pip install --python .venv/bin/python 'faster-whisper>=1.1.0' 'pyannote.audio>=4,<5'` 补齐备选链
+- 当前建议：默认服务直接使用 `uv sync --extra dev --extra default-runtime` 或 `bash tools/runtime_env.sh setup default`
 - `FunASR` 默认启用 `disable_update=True`，避免离线部署时做版本检查
 - `Qwen3-ASR` 本轮作为 admin-only 备选链，不替换默认主链；建议通过独立 `qwen` profile 运行
 
@@ -97,7 +97,7 @@ bash tools/runtime_env.sh setup qwen
 
 说明：
 
-- `default` 环境对应 `FunASR + 3D-Speaker + WebRTC VAD`
+- `default` 环境对应 `faster-whisper + 3D-Speaker + WebRTC VAD`
 - `pyannote` 环境对应 `faster-whisper + pyannote`
 - `qwen` 环境对应 `Qwen3-ASR + 3D-Speaker + 本地 vLLM + ForcedAligner`
 - 之所以拆多套 venv，是因为 `speakerlab`、`pyannote 4.x` 与 `Qwen3-ASR + vLLM` 的依赖栈都偏重，分开更利于长期维护和切换
@@ -106,7 +106,7 @@ bash tools/runtime_env.sh setup qwen
 - `Qwen3-ASR` 默认会额外约束 `max_model_len`，避免 vLLM 按模型原始 `65536` 上下文在 `12GB` 级显卡上起过大的 KV cache
 - 如果要跑 `faster-whisper + pyannote`，不要直接执行 `uv run msr-api`
 - 如果要跑 `Qwen3-ASR`，同样不要直接执行 `uv run msr-api`
-- `uv run msr-api` 使用的是仓库默认 `.venv`，更适合默认链；准确率优先链请使用 `bash tools/runtime_env.sh run pyannote`
+- `uv run msr-api` 使用的是仓库默认 `.venv`，更适合当前默认链
 - `Qwen3-ASR` 备选链请使用 `bash tools/runtime_env.sh run qwen`
 - `tools/runtime_env.sh run/exec` 现在会显式切到对应 profile 的 Python，并补上 `PYTHONPATH=src`，不再依赖 profile 内一定存在 `msr-api` console script
 - `tools/runtime_env.sh setup ...` 现在可重复执行；若 profile venv 已存在会直接复用，不再弹交互确认
@@ -179,18 +179,18 @@ uv run python tools/bootstrap_models.py --include-qwen
 
 ### 最近一次真实环境验证
 
-- 日期：`2026-04-15`
+- 日期：`2026-04-16`
 - 环境：`Linux x86_64 + NVIDIA GeForce RTX 3060 12GB + Driver 570.211.01 + CUDA 12.8`
-- 主链：`FunASR + 3D-Speaker + WebRTC VAD`
+- 主链：`faster-whisper + 3D-Speaker + WebRTC VAD`
 - 结果：默认 ASR 与 diarization 已成功加载，`POST /transcribe/` 同步返回 `200`
 - 样本：`16kHz / 单声道 / 17.19s` wav
-- 性能：单条样本处理约 `4.03s`，处理速度约 `4.27x`
+- 性能：`32s` 样本在 `faster-whisper large-v3 + 3D-Speaker` 链路下，ASR 约 `3.2s`
 - 管理面：`runtime/tasks`、`runtime/active`、`system/resources` 已验证能返回真实任务与 GPU 信息
 - 额外回归：`three-guys-record.mp3` 已验证按有效说话人分段返回，不再出现整段文本落到单一说话人的情况
 - 边界修复：说话人回填已升级为“词级时间戳归属后再重新拼句”，可把跨 speaker 边界的尾字头字拆开重分配
-- 离线稳定性：`FunASR` 更新检查提示已关闭，模型加载日志中不再出现版本检查提示
-- 备选链验证：`faster-whisper-large-v3` 与 `pyannote-community-1` 已下载到本地并完成真实推理
-- 备选链性能：`faster-whisper large-v3` 加载约 `6.5s`、`32s` 样本转写约 `3.2s`；`pyannote community-1` 加载约 `11.0s`、同样本 diarization 约 `3.1s`
+- 管理面修复：模型 load / unload 过程已改为后台线程执行，并释放模型管理锁，避免单次加载拖住其它管理读请求
+- 备选链验证：`pyannote-community-1` 已下载到本地并完成真实推理
+- 备选链性能：`pyannote community-1` 加载约 `11.0s`、同样本 diarization 约 `3.1s`
 - 兼容处理：`pyannote` 当前通过本地 `config.yaml` 加载，并在推理时直接喂入内存 waveform，绕开当前环境下 `torchcodec` 对系统 FFmpeg 的兼容问题
 
 ### Qwen3-ASR 当前状态
@@ -294,11 +294,11 @@ uv run python tools/bootstrap_models.py --include-qwen
 - `processing_time`
 - `processing_speed`
 
-当前转写响应还补了两条收敛规则：
+当前转写响应还补了几条收敛规则：
 
 - 只对有有效 ASR 文本片段的说话人生成 `speakers_info` 和 `total_speakers`
 - 返回中的 `speaker_id` / `speaker_label` 会按有效说话人的出现顺序重新编号为 `0/A`、`1/B`、`2/C`
-- 当 `FunASR` 提供词级时间戳时，服务会先按词级时间与 diarization 边界做归属，再拼回最终文本段，减少句尾串到相邻说话人的情况
+- 当当前 ASR 后端提供词级或 token 级时间戳时，服务会先按时间戳与 diarization 边界做归属，再拼回最终文本段，减少句尾串到相邻说话人的情况
 
 当同步转写发生显存不足时，服务会返回 `507`，错误体带 `cuda_oom` 机器码和建议说明。
 
@@ -370,6 +370,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 docker run --rm --gpus all --network none \
   -e MSR_API_KEY=change-this \
   -v "$(pwd)/models:/app/models" \
+  -v "$(pwd)/data:/app/data" \
   -p 8011:8011 \
   msr-gpu-runtime:latest
 ```
@@ -402,7 +403,7 @@ docker run --rm --gpus all --network none \
 
 ### Phase 2：默认主链路
 
-- 打通 `FunASR + 3D-Speaker + WebRTC VAD`
+- 打通 `faster-whisper + 3D-Speaker + WebRTC VAD`
 - 在同步 `/transcribe/` 下补齐内部并发控制、排队控制和任务观察
 
 ### Phase 3：备选后端
@@ -419,6 +420,7 @@ docker run --rm --gpus all --network none \
 详细版 roadmap 见 [docs/roadmap.md](docs/roadmap.md)。
 
 Linux + GPU 交接步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
+speaker registry 设计草案见 [docs/speaker-registry-design.md](docs/speaker-registry-design.md)。
 
 ## 13. 上游依赖项目链接
 

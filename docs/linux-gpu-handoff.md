@@ -67,7 +67,7 @@ curl -H "X-API-Key: $MSR_API_KEY" http://127.0.0.1:8011/api/v1/runtime/tasks
 uv run python tools/smoke_api.py \
   --base-url http://127.0.0.1:8011 \
   --api-key "$MSR_API_KEY" \
-  --asr-model funasr-paraformer-zh \
+  --asr-model faster-whisper-large-v3 \
   --diar-model 3dspeaker-default \
   --audio /absolute/path/to/sample.wav
 ```
@@ -97,6 +97,7 @@ docker run --rm --gpus all --network none \
   -e MSR_API_KEY="$MSR_API_KEY" \
   -v "$(pwd)/config:/app/config:ro" \
   -v "$(pwd)/models:/app/models:ro" \
+  -v "$(pwd)/data:/app/data" \
   -p 8011:8011 \
   msr-gpu-runtime:latest
 ```
@@ -107,7 +108,7 @@ docker run --rm --gpus all --network none \
 uv run python tools/smoke_api.py \
   --base-url http://127.0.0.1:8011 \
   --api-key "$MSR_API_KEY" \
-  --asr-model funasr-paraformer-zh \
+  --asr-model faster-whisper-large-v3 \
   --diar-model 3dspeaker-default \
   --audio /absolute/path/to/sample.wav
 ```

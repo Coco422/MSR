@@ -57,10 +57,10 @@ v1 only treats ASR as a formal pluggable boundary. Diarization remains internall
 
 The current ASR matrix is:
 
-- `FunASR`: default offline chain, paired with `3D-Speaker + WebRTC VAD`
-- `faster-whisper`: accuracy-first alternate backend, usually paired with `pyannote`
+- `faster-whisper`: current default offline chain, paired with `3D-Speaker + WebRTC VAD`
+- `FunASR`: retained as an alternate backend, but no longer treated as the default service path
 - `Qwen3-ASR`: experimental alternate backend, loaded through local in-process `vLLM` and requiring `Qwen3-ForcedAligner`
 
 `Qwen3-ASR` reuses the same public response contract as other backends. Its `ForcedAligner` output is converted into existing `TimedToken` records so the downstream speaker token-level reassignment logic stays unchanged.
 
-Future speaker identity work is intentionally staged behind the current pipeline. The next planned capability is a local speaker registry that stores speaker embeddings or other voice features so identities can be reused across audio files, for example mapping diarization speaker `A` in audio 1 to `Alice` and resolving the same voice in audio 2 back to `Alice`.
+Future speaker identity work is intentionally staged behind the current pipeline. The next planned capability is a local speaker registry that stores speaker embeddings or other voice features so identities can be reused across audio files, for example mapping diarization speaker `A` in audio 1 to `Alice` and resolving the same voice in audio 2 back to `Alice`. The current design draft lives in `docs/speaker-registry-design.md`.

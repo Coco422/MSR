@@ -67,21 +67,35 @@ def main() -> int:
 
     for model in settings.models:
         model.local_path.parent.mkdir(parents=True, exist_ok=True)
+        if not model.default:
+            if args.include_qwen and model.backend == "qwen_asr":
+                bootstrap_qwen_asr(model.id, model.local_path)
+                forced_aligner_path = model.options.get("forced_aligner_path")
+                if isinstance(forced_aligner_path, Path) and forced_aligner_path not in bootstrapped_aligners:
+                    bootstrap_qwen_forced_aligner(forced_aligner_path)
+                    bootstrapped_aligners.add(forced_aligner_path)
+                continue
+            if not args.include_alternates:
+                print(f"[SKIP] {model.id} ({model.backend})")
+                continue
 
         if model.backend == "funasr":
             bootstrap_funasr(model.id, model.local_path)
         elif model.backend == "3d_speaker":
             bootstrap_three_d_speaker(model.local_path)
-        elif args.include_alternates and model.backend == "faster_whisper":
+        elif model.backend == "faster_whisper":
             bootstrap_faster_whisper(model.id, model.local_path)
-        elif args.include_alternates and model.backend == "pyannote":
+        elif model.backend == "pyannote":
             bootstrap_pyannote(model.id, model.local_path, args.hf_token)
-        elif args.include_qwen and model.backend == "qwen_asr":
-            bootstrap_qwen_asr(model.id, model.local_path)
-            forced_aligner_path = model.options.get("forced_aligner_path")
-            if isinstance(forced_aligner_path, Path) and forced_aligner_path not in bootstrapped_aligners:
-                bootstrap_qwen_forced_aligner(forced_aligner_path)
-                bootstrapped_aligners.add(forced_aligner_path)
+        elif model.backend == "qwen_asr":
+            if args.include_qwen:
+                bootstrap_qwen_asr(model.id, model.local_path)
+                forced_aligner_path = model.options.get("forced_aligner_path")
+                if isinstance(forced_aligner_path, Path) and forced_aligner_path not in bootstrapped_aligners:
+                    bootstrap_qwen_forced_aligner(forced_aligner_path)
+                    bootstrapped_aligners.add(forced_aligner_path)
+            else:
+                print(f"[SKIP] {model.id} ({model.backend})")
         else:
             print(f"[SKIP] {model.id} ({model.backend})")
 

@@ -4,8 +4,8 @@ kind = "asr"
 backend = "funasr"
 local_path = "models/funasr/paraformer-zh"
 device = "cuda"
-enabled = true
-default = true
+enabled = false
+default = false
 
 [models.options]
 batch_size_s = 60
@@ -18,7 +18,7 @@ backend = "faster_whisper"
 local_path = "models/faster-whisper/large-v3"
 device = "cuda"
 enabled = true
-default = false
+default = true
 
 [models.options]
 compute_type = "float16"

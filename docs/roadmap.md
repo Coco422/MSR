@@ -40,7 +40,7 @@ Acceptance:
 
 Goal:
 
-- Make `FunASR + 3D-Speaker + WebRTC VAD` work as the default offline pipeline.
+- Make `faster-whisper + 3D-Speaker + WebRTC VAD` work as the default offline pipeline.
 
 Outputs:
 

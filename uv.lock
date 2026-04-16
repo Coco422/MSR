@@ -1924,7 +1924,7 @@ dependencies = [
 ]
 default-runtime = [
     { name = "addict" },
-    { name = "funasr" },
+    { name = "faster-whisper" },
     { name = "simplejson" },
     { name = "sortedcontainers" },
     { name = "speakerlab" },
@@ -1970,9 +1970,9 @@ requires-dist = [
     { name = "addict", marker = "extra == 'default-runtime'", specifier = ">=2.4.0,<3.0.0" },
     { name = "addict", marker = "extra == 'gpu-runtime'", specifier = ">=2.4.0,<3.0.0" },
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
+    { name = "faster-whisper", marker = "extra == 'default-runtime'", specifier = ">=1.1.0" },
     { name = "faster-whisper", marker = "extra == 'faster-whisper'", specifier = ">=1.1.0" },
     { name = "faster-whisper", marker = "extra == 'gpu-runtime'", specifier = ">=1.1.0" },
-    { name = "funasr", marker = "extra == 'default-runtime'", specifier = ">=1.2.0" },
     { name = "funasr", marker = "extra == 'funasr'", specifier = ">=1.2.0" },
     { name = "funasr", marker = "extra == 'gpu-runtime'", specifier = ">=1.2.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0,<1.0.0" },

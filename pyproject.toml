@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 default-runtime = [
-  "funasr>=1.2.0",
+  "faster-whisper>=1.1.0",
   "speakerlab",
   "addict>=2.4.0,<3.0.0",
   "simplejson>=3.20.0,<4.0.0",
