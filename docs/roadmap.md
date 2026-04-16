@@ -61,13 +61,15 @@ Acceptance:
 
 Goal:
 
-- Enable `faster-whisper` and `pyannote` as switchable alternatives.
+- Enable `faster-whisper`, `pyannote`, and experimental `Qwen3-ASR` as switchable alternatives.
 
 Outputs:
 
 - alternate ASR adapter
 - alternate diarization adapter
 - config-driven backend switching
+- local in-process `vLLM` profile for `Qwen3-ASR`
+- `ForcedAligner` integration as an internal dependency of the Qwen ASR backend
 - preliminary design for cross-audio speaker identity registry
 
 Acceptance:
@@ -75,6 +77,7 @@ Acceptance:
 - switching does not require a service restart
 - failure messages stay readable
 - default path remains unaffected
+- Qwen path can load strictly from local model directories and reuse the existing `/transcribe/` and async result contracts
 - roadmap covers how speaker identity can persist beyond a single audio file
 
 ## Phase 4: Hardening
@@ -90,6 +93,7 @@ Outputs:
 - smoke test instructions
 - fully updated README
 - admin console that reflects runtime limits, queue state and recent task summaries
+- benchmark notes for `Qwen3-ASR 0.6B` on `RTX 3060 12GB`, with `1.7B` tracked as experimental
 
 Acceptance:
 
@@ -97,3 +101,4 @@ Acceptance:
 - common errors are diagnosable
 - GPU image passes load, transcribe, unload smoke flow
 - runtime controls can be audited from the management plane
+- Qwen experimental chain has a documented go/no-go conclusion instead of remaining implicit

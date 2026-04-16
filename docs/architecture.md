@@ -30,7 +30,7 @@ The service is exposed upstream as both a compatibility synchronous API and a ta
 7. WebRTC VAD produces coarse speech ranges
 8. Diarization backend analyzes the full audio
 9. Long VAD ranges are split into bounded ASR chunks to reduce peak GPU memory
-10. Each bounded ASR chunk is sent through the active ASR backend
+10. Each bounded ASR chunk is sent through the active ASR backend, preferably through the shared `transcribe_many(...)` batch path
 11. ASR segments are matched to the diarization timeline by overlap
 12. Response is shaped to preserve the old demo contract or persisted for async result retrieval
 
@@ -38,7 +38,7 @@ The service is exposed upstream as both a compatibility synchronous API and a ta
 
 - `core/`: pure app wiring, config, security, errors
 - `services/`: orchestration, runtime scheduling, resource monitoring and task state
-- `backends/`: third-party model adapters only
+- `backends/`: third-party model adapters only, including `FunASR`, `faster-whisper`, and experimental `Qwen3-ASR`
 - `api/`: HTTP contracts only
 - `web/`: static management console only, used by admins and as API usage sample
 
@@ -54,5 +54,13 @@ MSR enforces offline execution by policy:
 ## Extension policy
 
 v1 only treats ASR as a formal pluggable boundary. Diarization remains internally switchable, but we intentionally avoid a larger plugin system until the current runtime proves stable.
+
+The current ASR matrix is:
+
+- `FunASR`: default offline chain, paired with `3D-Speaker + WebRTC VAD`
+- `faster-whisper`: accuracy-first alternate backend, usually paired with `pyannote`
+- `Qwen3-ASR`: experimental alternate backend, loaded through local in-process `vLLM` and requiring `Qwen3-ForcedAligner`
+
+`Qwen3-ASR` reuses the same public response contract as other backends. Its `ForcedAligner` output is converted into existing `TimedToken` records so the downstream speaker token-level reassignment logic stays unchanged.
 
 Future speaker identity work is intentionally staged behind the current pipeline. The next planned capability is a local speaker registry that stores speaker embeddings or other voice features so identities can be reused across audio files, for example mapping diarization speaker `A` in audio 1 to `Alice` and resolving the same voice in audio 2 back to `Alice`.

@@ -133,6 +133,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
         model_path = Path(raw["local_path"])
         if not model_path.is_absolute():
             model_path = root / model_path
+        options = _normalize_model_options(raw.get("options", {}), root)
         models.append(
             ModelConfig(
                 id=raw["id"],
@@ -142,7 +143,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
                 device=raw.get("device", "cpu"),
                 enabled=bool(raw.get("enabled", True)),
                 default=bool(raw.get("default", False)),
-                options=dict(raw.get("options", {})),
+                options=options,
             )
         )
 
@@ -186,3 +187,14 @@ def _read_int(section: dict[str, Any], key: str, default: int, minimum: int) -> 
     if value < minimum:
         raise ConfigurationError(f"runtime.{key} must be >= {minimum}, got {value}")
     return value
+
+
+def _normalize_model_options(options: dict[str, Any], root: Path) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in dict(options).items():
+        if key.endswith("_path") and isinstance(value, str):
+            path = Path(value)
+            normalized[key] = path if path.is_absolute() else root / path
+            continue
+        normalized[key] = value
+    return normalized

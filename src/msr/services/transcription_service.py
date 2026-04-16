@@ -15,8 +15,8 @@ from fastapi import UploadFile
 
 from msr.backends.vad.webrtc_backend import WebRTCVADBackend
 from msr.core.config import Settings
-from msr.core.errors import InvalidAudioError
-from msr.core.types import SpeakerSegment, TextSegment, TimedToken
+from msr.core.errors import InvalidAudioError, TranscriptionError
+from msr.core.types import AudioClip, SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import load_audio, write_clip
 from msr.services.model_manager import ModelManager
 
@@ -122,23 +122,19 @@ class TranscriptionService:
 
             update_stage("asr", audio_duration)
             text_segments: list[TextSegment] = []
-            for start, end in asr_ranges:
-                clip = write_clip(audio, sample_rate, start, end, prepared.task_dir)
-                for segment in asr_backend.transcribe(clip.path, language=prepared.language, timestamps=True):
-                    segment_start = max(0.0, start + segment.start)
-                    segment_end = min(end, start + segment.end)
-                    if segment_end <= segment_start:
-                        continue
-                    if not str(segment.text).strip():
-                        continue
-                    text_segments.append(
-                        TextSegment(
-                            start=segment_start,
-                            end=segment_end,
-                            text=segment.text,
-                            confidence=segment.confidence,
-                        )
-                    )
+            clips = [write_clip(audio, sample_rate, start, end, prepared.task_dir) for start, end in asr_ranges]
+            clip_segments = asr_backend.transcribe_many(
+                [clip.path for clip in clips],
+                language=prepared.language,
+                timestamps=True,
+            )
+            if len(clip_segments) != len(clips):
+                raise TranscriptionError("ASR backend returned a mismatched batch result.")
+            for clip, segments in zip(clips, clip_segments):
+                for segment in segments:
+                    adjusted = _offset_text_segment(segment, clip)
+                    if adjusted is not None:
+                        text_segments.append(adjusted)
 
             update_stage("postprocess", audio_duration)
             speaker_texts = _match_text_to_speakers(text_segments, speaker_segments)
@@ -184,6 +180,47 @@ def _split_ranges_for_asr(
         if end > current:
             chunks.append((current, end))
     return chunks
+
+
+def _offset_text_segment(segment: TextSegment, clip: AudioClip) -> TextSegment | None:
+    text = str(segment.text).strip()
+    if not text:
+        return None
+
+    tokens = tuple(
+        adjusted
+        for adjusted in (
+            _offset_token(token, clip)
+            for token in segment.tokens
+        )
+        if adjusted is not None
+    )
+
+    if tokens:
+        start = tokens[0].start
+        end = tokens[-1].end
+    else:
+        start = max(0.0, clip.start + segment.start)
+        end = min(clip.end, clip.start + segment.end)
+
+    if end <= start:
+        return None
+
+    return TextSegment(
+        start=start,
+        end=end,
+        text=text,
+        confidence=segment.confidence,
+        tokens=tokens,
+    )
+
+
+def _offset_token(token: TimedToken, clip: AudioClip) -> TimedToken | None:
+    start = max(clip.start, clip.start + token.start)
+    end = min(clip.end, clip.start + token.end)
+    if end <= start:
+        return None
+    return TimedToken(text=token.text, start=start, end=end, confidence=token.confidence)
 
 
 def _match_text_to_speakers(text_segments: list[TextSegment], speaker_segments: list[SpeakerSegment]) -> dict[str, list[TextSegment]]:

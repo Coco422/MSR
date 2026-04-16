@@ -16,6 +16,9 @@
 - `models/faster-whisper/large-v3`
 - `models/3d-speaker`
 - `models/pyannote/speaker-diarization-community-1`
+- `models/qwen/qwen3-asr-0.6b`
+- `models/qwen/qwen3-asr-1.7b`
+- `models/qwen/qwen3-forced-aligner-0.6b`
 
 如果实际目录不同，修改 `config/models.toml` 即可。
 
@@ -42,6 +45,13 @@ uv sync --extra dev --extra gpu-runtime
 uv run python tools/doctor.py --include-alternates
 ```
 
+如果要验证 `Qwen3-ASR` 备选链路，使用独立 profile：
+
+```bash
+bash tools/runtime_env.sh setup qwen
+bash tools/runtime_env.sh exec qwen python tools/doctor.py --include-qwen
+```
+
 ## 3. 本地服务方式
 
 ```bash
@@ -58,6 +68,23 @@ uv run python tools/smoke_api.py \
   --base-url http://127.0.0.1:8011 \
   --api-key "$MSR_API_KEY" \
   --asr-model funasr-paraformer-zh \
+  --diar-model 3dspeaker-default \
+  --audio /absolute/path/to/sample.wav
+```
+
+如果要跑 `Qwen3-ASR`：
+
+```bash
+bash tools/runtime_env.sh run qwen
+```
+
+另开终端：
+
+```bash
+uv run python tools/smoke_api.py \
+  --base-url http://127.0.0.1:8011 \
+  --api-key "$MSR_API_KEY" \
+  --asr-model qwen3-asr-0.6b \
   --diar-model 3dspeaker-default \
   --audio /absolute/path/to/sample.wav
 ```
@@ -93,6 +120,8 @@ uv run python tools/smoke_api.py \
 - Docker 版本
 - `nvidia-smi` 输出摘要
 - 默认链路是否成功
+- `qwen3-asr-0.6b` 是否成功 load 并完成转写
+- `qwen3-asr-1.7b` 是否能稳定 load；若失败，失败点在 load、转写还是 OOM
 - 处理一段样例音频的总耗时
 - 显存峰值
 - `runtime/tasks` 中活跃任务数、排队任务数、最近任务摘要是否正常
@@ -108,3 +137,10 @@ uv run python tools/smoke_api.py \
 3. 模型目录权限是否可读
 4. 先单独尝试 `load`，不要直接测 `/transcribe/`
 5. 再切换到 `faster-whisper + pyannote` 备选链路验证
+
+## 7. Qwen3-ASR 额外说明
+
+- 本轮只支持本地进程内 `vLLM`，不接 `vllm serve` 外部服务
+- `ForcedAligner` 是 Qwen backend 的必需辅助模型，不做静默降级
+- `qwen3-asr-0.6b` 是首轮必须跑通的验收模型
+- `qwen3-asr-1.7b` 作为实验链路，不因为单卡 `3060 12GB` 不稳而阻塞本轮合入，但必须留下验收记录

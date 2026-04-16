@@ -8,6 +8,7 @@ import threading
 import time
 import types
 import sys
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -15,8 +16,10 @@ import soundfile as sf
 from fastapi.testclient import TestClient
 
 from msr.app.main import create_app
+from msr.backends.asr.base import ASRBackend
 from msr.backends.asr.faster_whisper_backend import FasterWhisperBackend
 from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
+from msr.backends.asr.qwen_asr_backend import QwenASRBackend
 from msr.backends.diarization.pyannote_backend import (
     PyannoteBackend,
     _extract_pyannote_annotation,
@@ -32,6 +35,7 @@ from msr.services.transcription_service import (
     _build_speakers_info,
     _build_transcripts,
     _match_text_to_speakers,
+    _offset_text_segment,
     _split_ranges_for_asr,
 )
 
@@ -54,6 +58,21 @@ class FakeASRBackend:
         if delay > 0:
             time.sleep(delay)
         return [TextSegment(start=0.0, end=duration, text="测试文本")]
+
+    def transcribe_many(
+        self,
+        audio_paths: list[Path],
+        language: str | list[str | None],
+        timestamps: bool = True,
+    ) -> list[list[TextSegment]]:
+        if isinstance(language, str) or language is None:
+            languages = [str(language or "auto")] * len(audio_paths)
+        else:
+            languages = [str(item or "auto") for item in language]
+        return [
+            self.transcribe(audio_path, language=item, timestamps=timestamps)
+            for audio_path, item in zip(audio_paths, languages)
+        ]
 
 
 class FakeDiarizationBackend:
@@ -80,11 +99,29 @@ def build_settings(
     max_queued_tasks: int = 2,
     recent_task_limit: int = 20,
     asr_options: dict | None = None,
+    extra_models: list[ModelConfig] | None = None,
 ) -> Settings:
     asr_dir = tmp_path / "asr"
     diar_dir = tmp_path / "diar"
     asr_dir.mkdir()
     diar_dir.mkdir()
+
+    models = [
+        ModelConfig(
+            id="funasr-paraformer-zh",
+            kind="asr",
+            backend="funasr",
+            local_path=asr_dir,
+            options=dict(asr_options or {}),
+        ),
+        ModelConfig(
+            id="3dspeaker-default",
+            kind="diarization",
+            backend="3d_speaker",
+            local_path=diar_dir,
+        ),
+    ]
+    models.extend(extra_models or [])
 
     return Settings(
         project_root=Path(__file__).resolve().parents[1],
@@ -107,21 +144,7 @@ def build_settings(
             recent_task_limit=recent_task_limit,
             data_dir=tmp_path / "data",
         ),
-        models=[
-            ModelConfig(
-                id="funasr-paraformer-zh",
-                kind="asr",
-                backend="funasr",
-                local_path=asr_dir,
-                options=dict(asr_options or {}),
-            ),
-            ModelConfig(
-                id="3dspeaker-default",
-                kind="diarization",
-                backend="3d_speaker",
-                local_path=diar_dir,
-            ),
-        ],
+        models=models,
     )
 
 
@@ -250,6 +273,57 @@ def test_model_load_and_transcribe_flow(tmp_path: Path):
         assert recent
         assert recent[0]["status"] == "completed"
         assert recent[0]["filename"] == "sample.wav"
+
+
+def test_models_endpoint_lists_and_loads_qwen_models(tmp_path: Path):
+    headers = {"X-API-Key": "test-key"}
+    qwen_model_dir = tmp_path / "qwen-asr"
+    qwen_aligner_dir = tmp_path / "qwen-aligner"
+    qwen_model_dir.mkdir()
+    qwen_aligner_dir.mkdir()
+
+    ASR_FACTORIES["funasr"] = FakeASRBackend
+    ASR_FACTORIES["qwen_asr"] = FakeASRBackend
+    DIARIZATION_FACTORIES["3d_speaker"] = FakeDiarizationBackend
+
+    settings = build_settings(
+        tmp_path,
+        extra_models=[
+            ModelConfig(
+                id="qwen3-asr-0.6b",
+                kind="asr",
+                backend="qwen_asr",
+                local_path=qwen_model_dir,
+                options={
+                    "engine": "vllm",
+                    "forced_aligner_path": qwen_aligner_dir,
+                    "forced_aligner_dtype": "float16",
+                },
+            ),
+            ModelConfig(
+                id="qwen3-asr-1.7b",
+                kind="asr",
+                backend="qwen_asr",
+                local_path=qwen_model_dir,
+                options={
+                    "engine": "vllm",
+                    "forced_aligner_path": qwen_aligner_dir,
+                    "forced_aligner_dtype": "float16",
+                },
+            ),
+        ],
+    )
+
+    with TestClient(create_app(settings=settings)) as client:
+        models = client.get("/api/v1/models", headers=headers)
+        assert models.status_code == 200
+        payload = models.json()
+        qwen_ids = [item["id"] for item in payload if item["backend"] == "qwen_asr"]
+        assert qwen_ids == ["qwen3-asr-0.6b", "qwen3-asr-1.7b"]
+
+        load = client.post("/api/v1/models/asr/qwen3-asr-0.6b/load", headers=headers)
+        assert load.status_code == 200
+        assert load.json()["id"] == "qwen3-asr-0.6b"
 
 
 def test_transcribe_without_loaded_models_returns_409_and_does_not_queue(tmp_path: Path):
@@ -635,6 +709,52 @@ def test_funasr_load_disables_update_check_by_default(monkeypatch, tmp_path: Pat
     assert captured["disable_update"] is True
 
 
+def test_asr_backend_transcribe_many_defaults_to_sequential_calls(tmp_path: Path):
+    audio_path = tmp_path / "sample.wav"
+    sf.write(str(audio_path), np.zeros(16000, dtype=np.float32), 16000)
+    calls: list[tuple[str, str, bool]] = []
+
+    class CountingBackend(ASRBackend):
+        def load(self, local_path: Path, device: str, options: dict | None = None) -> None:
+            self.loaded = True
+
+        def unload(self) -> None:
+            self.loaded = False
+
+        def transcribe(self, audio_path: Path, language: str, timestamps: bool = True) -> list[TextSegment]:
+            calls.append((audio_path.name, language, timestamps))
+            return [TextSegment(start=0.0, end=0.5, text=language)]
+
+    backend = CountingBackend("counting")
+    results = backend.transcribe_many([audio_path, audio_path], language="zh", timestamps=True)
+
+    assert len(results) == 2
+    assert [item[0].text for item in results] == ["zh", "zh"]
+    assert calls == [("sample.wav", "zh", True), ("sample.wav", "zh", True)]
+
+
+def test_offset_text_segment_preserves_and_offsets_tokens():
+    segment = TextSegment(
+        start=0.0,
+        end=0.5,
+        text="你好",
+        tokens=(
+            TimedToken(text="你", start=0.0, end=0.1),
+            TimedToken(text="好", start=0.1, end=0.3),
+        ),
+    )
+
+    adjusted = _offset_text_segment(segment, types.SimpleNamespace(start=5.0, end=6.0))
+
+    assert adjusted is not None
+    assert adjusted.start == 5.0
+    assert adjusted.end == 5.3
+    assert [(token.text, token.start, token.end) for token in adjusted.tokens] == [
+        ("你", 5.0, 5.1),
+        ("好", 5.1, 5.3),
+    ]
+
+
 def test_faster_whisper_load_reports_runtime_hint_when_dependency_is_missing(monkeypatch, tmp_path: Path):
     original_import = builtins.__import__
 
@@ -678,6 +798,206 @@ def test_pyannote_load_reports_runtime_hint_when_dependency_is_missing(monkeypat
     assert "missing dependency 'pyannote.audio'" in message
     assert "tools/runtime_env.sh run pyannote" in message
     assert "python=" in message
+
+
+def test_qwen_load_reports_runtime_hint_when_qwen_dependency_is_missing(monkeypatch, tmp_path: Path):
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "qwen_asr":
+            raise ModuleNotFoundError("No module named 'qwen_asr'")
+        return ModuleType(name)
+
+    monkeypatch.setattr("msr.backends.asr.qwen_asr_backend.importlib.import_module", fake_import_module)
+
+    aligner_dir = tmp_path / "aligner"
+    aligner_dir.mkdir()
+    backend = QwenASRBackend(
+        "qwen3-asr-0.6b",
+        options={"engine": "vllm", "forced_aligner_path": aligner_dir, "forced_aligner_dtype": "float16"},
+    )
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path, "cuda")
+
+    message = str(exc_info.value)
+    assert "missing dependency 'qwen-asr'" in message
+    assert "tools/runtime_env.sh run qwen" in message
+    assert "python=" in message
+
+
+def test_qwen_load_reports_runtime_hint_when_vllm_dependency_is_missing(monkeypatch, tmp_path: Path):
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "vllm":
+            raise ModuleNotFoundError("No module named 'vllm'")
+        return ModuleType(name)
+
+    monkeypatch.setattr("msr.backends.asr.qwen_asr_backend.importlib.import_module", fake_import_module)
+    monkeypatch.setitem(sys.modules, "qwen_asr", ModuleType("qwen_asr"))
+
+    aligner_dir = tmp_path / "aligner"
+    aligner_dir.mkdir()
+    backend = QwenASRBackend(
+        "qwen3-asr-0.6b",
+        options={"engine": "vllm", "forced_aligner_path": aligner_dir, "forced_aligner_dtype": "float16"},
+    )
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path, "cuda")
+
+    message = str(exc_info.value)
+    assert "missing dependency 'vllm'" in message
+    assert "tools/runtime_env.sh run qwen" in message
+    assert "python=" in message
+
+
+def test_qwen_load_fails_when_forced_aligner_path_is_missing(tmp_path: Path):
+    backend = QwenASRBackend(
+        "qwen3-asr-0.6b",
+        options={
+            "engine": "vllm",
+            "forced_aligner_path": tmp_path / "missing-aligner",
+            "forced_aligner_dtype": "float16",
+        },
+    )
+
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path / "missing-model", "cuda")
+
+    assert "forced aligner path does not exist" in str(exc_info.value)
+
+
+def test_qwen_backend_maps_timestamps_and_languages(monkeypatch, tmp_path: Path):
+    audio_a = tmp_path / "a.wav"
+    audio_b = tmp_path / "b.wav"
+    sf.write(str(audio_a), np.zeros(16000, dtype=np.float32), 16000)
+    sf.write(str(audio_b), np.zeros(16000, dtype=np.float32), 16000)
+
+    model_dir = tmp_path / "qwen"
+    aligner_dir = tmp_path / "aligner"
+    model_dir.mkdir()
+    aligner_dir.mkdir()
+
+    fake_torch = types.SimpleNamespace(
+        float16="float16",
+        bfloat16="bfloat16",
+        float32="float32",
+    )
+
+    class FakeTimestamp:
+        def __init__(self, text: str, start_time: float, end_time: float):
+            self.text = text
+            self.start_time = start_time
+            self.end_time = end_time
+
+    class FakeResult:
+        def __init__(self, text: str, language: str, stamps: list[FakeTimestamp]):
+            self.text = text
+            self.language = language
+            self.time_stamps = stamps
+
+    class FakeQwenModel:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.calls: list[dict] = []
+
+        def transcribe(self, **kwargs):
+            self.calls.append(kwargs)
+            audio = kwargs["audio"]
+            if isinstance(audio, list):
+                return [
+                    FakeResult("你好", "Chinese", [FakeTimestamp("你", 0.0, 0.2), FakeTimestamp("好", 0.2, 0.4)]),
+                    FakeResult("hello", "English", [FakeTimestamp("hel", 0.0, 0.3), FakeTimestamp("lo", 0.3, 0.6)]),
+                ]
+            return [FakeResult("你好", "Chinese", [FakeTimestamp("你", 0.0, 0.2), FakeTimestamp("好", 0.2, 0.4)])]
+
+    class FakeQwen3ASRModel:
+        instances: list[FakeQwenModel] = []
+
+        @classmethod
+        def LLM(cls, **kwargs):
+            instance = FakeQwenModel(**kwargs)
+            cls.instances.append(instance)
+            return instance
+
+    fake_qwen_module = ModuleType("qwen_asr")
+    fake_qwen_module.Qwen3ASRModel = FakeQwen3ASRModel
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "qwen_asr", fake_qwen_module)
+    monkeypatch.setitem(sys.modules, "vllm", ModuleType("vllm"))
+
+    backend = QwenASRBackend(
+        "qwen3-asr-0.6b",
+        options={
+            "engine": "vllm",
+            "gpu_memory_utilization": 0.65,
+            "max_inference_batch_size": 32,
+            "max_new_tokens": 1024,
+            "forced_aligner_path": aligner_dir,
+            "forced_aligner_dtype": "float16",
+        },
+    )
+    backend.load(model_dir, "cuda")
+    results = backend.transcribe_many([audio_a, audio_b], language=["zh", "en"], timestamps=True)
+
+    assert len(results) == 2
+    assert results[0][0].text == "你好"
+    assert [token.text for token in results[0][0].tokens] == ["你", "好"]
+    assert [(token.start, token.end) for token in results[1][0].tokens] == [(0.0, 0.3), (0.3, 0.6)]
+
+    model_instance = FakeQwen3ASRModel.instances[0]
+    assert model_instance.kwargs["model"] == str(model_dir)
+    assert model_instance.kwargs["forced_aligner"] == str(aligner_dir)
+    assert model_instance.kwargs["forced_aligner_kwargs"]["device_map"] == "cuda:0"
+    assert model_instance.kwargs["forced_aligner_kwargs"]["dtype"] == "float16"
+    assert model_instance.calls[0]["language"] == ["Chinese", "English"]
+
+
+def test_load_settings_resolves_model_option_paths(tmp_path: Path):
+    project_root = tmp_path / "project"
+    config_dir = project_root / "config"
+    models_dir = project_root / "models"
+    config_dir.mkdir(parents=True)
+    (models_dir / "qwen" / "qwen3-asr-0.6b").mkdir(parents=True)
+    (models_dir / "qwen" / "qwen3-forced-aligner-0.6b").mkdir(parents=True)
+
+    (config_dir / "app.toml").write_text(
+        """
+[app]
+name = "MSR"
+service_name = "Multi Speaker Recognization"
+version = "0.1.0"
+host = "127.0.0.1"
+port = 8011
+log_level = "INFO"
+default_language = "zh"
+temp_dir = "tmp"
+strict_offline = true
+
+[security]
+api_key = "test-key"
+""".strip(),
+        encoding="utf-8",
+    )
+    (config_dir / "models.toml").write_text(
+        """
+[[models]]
+id = "qwen3-asr-0.6b"
+kind = "asr"
+backend = "qwen_asr"
+local_path = "models/qwen/qwen3-asr-0.6b"
+
+[models.options]
+engine = "vllm"
+forced_aligner_path = "models/qwen/qwen3-forced-aligner-0.6b"
+forced_aligner_dtype = "float16"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(project_root=project_root)
+
+    assert settings.models[0].local_path == project_root / "models" / "qwen" / "qwen3-asr-0.6b"
+    assert settings.models[0].options["forced_aligner_path"] == (
+        project_root / "models" / "qwen" / "qwen3-forced-aligner-0.6b"
+    )
 
 
 def test_speaker_outputs_filter_invalid_speakers_and_relabel_sequentially():

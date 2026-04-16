@@ -10,6 +10,7 @@ from typing import Any, Callable
 from msr.backends.asr.base import ASRBackend
 from msr.backends.asr.faster_whisper_backend import FasterWhisperBackend
 from msr.backends.asr.funasr_backend import FunASRBackend
+from msr.backends.asr.qwen_asr_backend import QwenASRBackend
 from msr.backends.diarization.base import DiarizationBackend
 from msr.backends.diarization.pyannote_backend import PyannoteBackend
 from msr.backends.diarization.three_d_speaker_backend import ThreeDSpeakerBackend
@@ -21,6 +22,7 @@ from msr.core.runtime_env import format_runtime_context
 ASR_FACTORIES = {
     "funasr": FunASRBackend,
     "faster_whisper": FasterWhisperBackend,
+    "qwen_asr": QwenASRBackend,
 }
 
 DIARIZATION_FACTORIES = {

@@ -9,21 +9,24 @@ usage() {
 MSR 运行环境切换脚本
 
 用法:
-  bash tools/runtime_env.sh setup [default|pyannote|all]
-  bash tools/runtime_env.sh run [default|pyannote]
-  bash tools/runtime_env.sh exec [default|pyannote] <command...>
+  bash tools/runtime_env.sh setup [default|pyannote|qwen|all]
+  bash tools/runtime_env.sh run [default|pyannote|qwen]
+  bash tools/runtime_env.sh exec [default|pyannote|qwen] <command...>
   bash tools/runtime_env.sh help
 
 说明:
   default   : FunASR + 3D-Speaker + WebRTC VAD，偏兼容与当前默认链
   pyannote  : faster-whisper + pyannote，偏准确率优先
+  qwen      : Qwen3-ASR + 本地 vLLM + ForcedAligner，偏实验性 accuracy-first
   注意      : 需要切换到 pyannote 链路时，不要直接执行 uv run msr-api
 
 示例:
   bash tools/runtime_env.sh setup default
   bash tools/runtime_env.sh setup pyannote
+  bash tools/runtime_env.sh setup qwen
   bash tools/runtime_env.sh run pyannote
   bash tools/runtime_env.sh exec pyannote python tools/doctor.py --include-alternates
+  bash tools/runtime_env.sh exec qwen python tools/doctor.py --include-qwen
 EOF
 }
 
@@ -38,6 +41,7 @@ profile_dir() {
   case "${1}" in
     default) echo "${ROOT_DIR}/.venv.default" ;;
     pyannote) echo "${ROOT_DIR}/.venv.pyannote" ;;
+    qwen) echo "${ROOT_DIR}/.venv.qwen" ;;
     *)
       echo "未知 profile: ${1}" >&2
       exit 1
@@ -94,6 +98,19 @@ create_pyannote_env() {
     "pyannote.audio>=4.0.0,<5.0.0"
 }
 
+create_qwen_env() {
+  local dir="${ROOT_DIR}/.venv.qwen"
+  local python="${dir}/bin/python"
+  echo "[qwen] 创建虚拟环境: ${dir}"
+  uv venv --allow-existing --python "${PYTHON_BIN}" "${dir}"
+  echo "[qwen] 安装项目基础依赖: dev"
+  uv pip install --python "${python}" -e ".[dev]"
+  echo "[qwen] 安装 qwen-asr / vLLM 运行栈"
+  uv pip install --python "${python}" \
+    "qwen-asr==0.0.6" \
+    "vllm==0.14.0"
+}
+
 setup_profiles() {
   local target="${1:-all}"
   ensure_uv
@@ -105,9 +122,13 @@ setup_profiles() {
     pyannote)
       create_pyannote_env
       ;;
+    qwen)
+      create_qwen_env
+      ;;
     all)
       create_default_env
       create_pyannote_env
+      create_qwen_env
       ;;
     *)
       echo "不支持的 setup 目标: ${target}" >&2
@@ -121,7 +142,9 @@ setup_profiles() {
 创建完成。常用命令:
   bash tools/runtime_env.sh run default
   bash tools/runtime_env.sh run pyannote
+  bash tools/runtime_env.sh run qwen
   bash tools/runtime_env.sh exec pyannote python tools/doctor.py --include-alternates
+  bash tools/runtime_env.sh exec qwen python tools/doctor.py --include-qwen
 EOF
 }
 

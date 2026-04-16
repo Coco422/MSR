@@ -3,6 +3,7 @@ AIMeeting-Docker/
 .venv/
 .venv.default/
 .venv.pyannote/
+.venv.qwen/
 __pycache__/
 .pytest_cache/
 tmp/

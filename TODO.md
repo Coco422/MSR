@@ -1,6 +1,6 @@
 # MSR TODO
 
-更新时间：2026-04-15
+更新时间：2026-04-16
 
 ## 文档约定
 
@@ -15,6 +15,7 @@
 - [x] 异步任务接口完成：提交、状态查询、结果拉取
 - [x] 管理接口完成：`auth/check`、`models`、`runtime/active`、`system/resources`
 - [x] ASR 后端骨架完成：`FunASR`、`faster-whisper`
+- [x] ASR 后端已补第三套实验链：`Qwen3-ASR + 本地 vLLM + ForcedAligner`
 - [x] diarization 后端骨架完成：`3D-Speaker`、`pyannote`
 - [x] 默认主链恢复：`FunASR + 3D-Speaker + WebRTC VAD`
 - [x] 同步 `/transcribe/` 已接入有界并行与有界排队
@@ -43,11 +44,18 @@
 - [x] `faster-whisper-large-v3` 已下载到 `models/faster-whisper/large-v3`
 - [x] `pyannote-community-1` 已下载到 `models/pyannote/speaker-diarization-community-1`
 - [x] `pyannote` 后端已兼容本地 `config.yaml` 加载、4.x `DiarizeOutput` 返回结构和内存 waveform 输入
-- [x] 已提供双 venv 切换脚本：默认链环境 / `faster-whisper + pyannote` 环境
-- [x] 双 venv 的 `setup/run/exec` 已修复并验证，profile 启动不再依赖缺失的 `msr-api` console script
+- [x] 已提供多 profile venv 切换脚本：默认链环境 / `faster-whisper + pyannote` 环境 / `Qwen3-ASR + vLLM` 环境
+- [x] 多 profile 的 `setup/run/exec` 已修复并验证，profile 启动不再依赖缺失的 `msr-api` console script
 - [x] `runtime_env.sh setup ...` 已改为可重复执行，不再因已有 venv 弹交互确认
 - [x] 启动阶段、模型加载阶段、任务阶段日志已补强，可直接看到当前解释器/venv、模型路径和阶段流转
 - [x] `faster-whisper` / `pyannote` 缺依赖时会返回更明确的环境切换提示，不再只报裸 `ModuleNotFoundError`
+- [x] `ASRBackend` 已新增 `transcribe_many(...)` 默认实现，现有 `FunASR` / `faster-whisper` 不受影响
+- [x] 转写编排已切到 clip 批量 ASR 接口，Qwen 链路可对单任务多个 VAD clip 做批推理
+- [x] Qwen backend 已接通 `ForcedAligner -> TimedToken` 映射，并复用现有 speaker token 级回填逻辑
+- [x] `config/models.toml` 已加入 `qwen3-asr-0.6b`、`qwen3-asr-1.7b` 与 `forced_aligner_path`
+- [x] `tools/runtime_env.sh` 已加入独立 `qwen` profile，固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
+- [x] `tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已补齐
+- [x] README、architecture、roadmap、Linux GPU handoff 已加入 Qwen vLLM 备选链说明
 
 ## 当前待推进
 
@@ -59,10 +67,14 @@
 - [x] 准备一个最小示例音频 `samples/` 目录结构说明
 - [ ] 在真实 GPU 环境验证默认链路的吞吐、显存峰值和排队表现
 - [ ] 基于真实准确率表现，评估是否把 `faster-whisper + pyannote` 提升为 accuracy-first 推荐链，甚至替换当前默认链
+- [ ] 在 `RTX 3060 12GB` 上完成 `qwen3-asr-0.6b + 3D-Speaker` 真机转写验收，记录加载耗时、转写耗时、显存峰值和长音频稳定性
+- [ ] 把 `qwen3-asr-1.7b` 作为实验链路做一次真机验证，明确是否因显存或稳定性原因保持非推荐状态
+- [ ] 对比同一批样本上的 `FunASR`、`faster-whisper`、`Qwen3-ASR` 主观准确率和 speaker 对齐效果
 - [ ] 评估是否需要把当前任务摘要导出到日志或 metrics 系统
 - [ ] 记录默认链在真实 GPU 环境下的显存峰值，而不只是加载后常驻占用
 - [ ] 补一份“本轮真机验证纪要”到 `docs/`，沉淀环境和问题修复点
 - [ ] 继续优化 `FunASR + 3D-Speaker` 在多人短句场景下的切句质量，减少“嗯/哦”等极短片段
+- [ ] 评估是否需要为 Qwen 链路单独加更严格的 clip batch 上限，避免批量 VAD 场景下 vLLM 或 aligner 触发显存抖动
 - [ ] 评估是否要把同步示例页也升级成“同步/异步双模式”联调页面
 - [ ] 继续收敛默认链加载日志，评估是否要压低 `modelscope` / `datasets` 的纯信息级噪声
 - [ ] 评估是否要把启动日志再细分为 `INFO` / `DEBUG` 两档，避免生产期与调试期日志密度冲突
@@ -87,6 +99,8 @@
 - [ ] 用 `docker run --gpus all --network none` 做完整离线验收
 - [ ] 验证 `FunASR + 3D-Speaker` 默认链路在多任务并发下的吞吐、排队和完成乱序表现
 - [x] 验证 `faster-whisper + pyannote` 备选链路
+- [ ] 验证 `Qwen3-ASR 0.6B` 备选链路
+- [ ] 记录 `Qwen3-ASR 1.7B` 在 `3060 12GB` 上是否可接受
 - [ ] 核对各模型是否仍有隐式联网行为
 - [ ] 验证容器内模型路径、权限、挂载方式
 - [ ] 补一份真实环境依赖版本记录：CUDA、驱动、Docker、Python
@@ -98,6 +112,7 @@
 - [ ] 根据真实模型准备方式决定是否保留 `gpu-runtime` 全量 extra
 - [x] 增加 `default-runtime` extra，避免默认链路首次部署就安装全量备选后端
 - [x] 将默认 GPU 依赖固定到 CUDA 12 兼容的 PyTorch 2.10 系列
+- [ ] 评估是否为 Qwen 链路单独维护额外的 handoff 文档或 benchmark 纪要
 - [ ] 确认是否需要拆 `Dockerfile.gpu` 和 `Dockerfile.gpu.slim`
 - [ ] 评估 `/transcribe/` 是否要补 `speaker_count_hint` 等可选参数
 - [ ] 设计 speaker registry：保存说话人声纹特征并支持跨音频识别同一人
