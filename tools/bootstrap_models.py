@@ -90,7 +90,9 @@ def main() -> int:
 
 
 def bootstrap_funasr(model_id: str, target_dir: Path) -> None:
-    from modelscope.hub.snapshot_download import snapshot_download
+    snapshot_download = _import_modelscope_snapshot_download("FunASR")
+    if snapshot_download is None:
+        return
 
     source = FUNASR_DEFAULTS.get(model_id)
     if not source:
@@ -102,7 +104,9 @@ def bootstrap_funasr(model_id: str, target_dir: Path) -> None:
 
 
 def bootstrap_three_d_speaker(target_dir: Path) -> None:
-    from modelscope.hub.snapshot_download import snapshot_download
+    snapshot_download = _import_modelscope_snapshot_download("3D-Speaker")
+    if snapshot_download is None:
+        return
 
     print(f"[DL] 3D-Speaker cache -> {target_dir}")
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -111,7 +115,9 @@ def bootstrap_three_d_speaker(target_dir: Path) -> None:
 
 
 def bootstrap_faster_whisper(model_id: str, target_dir: Path) -> None:
-    from huggingface_hub import snapshot_download
+    snapshot_download = _import_hf_snapshot_download("faster-whisper")
+    if snapshot_download is None:
+        return
 
     source = FASTER_WHISPER_DEFAULTS.get(model_id)
     if not source:
@@ -127,7 +133,9 @@ def bootstrap_pyannote(model_id: str, target_dir: Path, hf_token: str) -> None:
         print(f"[SKIP] Missing --hf-token for pyannote model: {model_id}")
         return
 
-    from huggingface_hub import snapshot_download
+    snapshot_download = _import_hf_snapshot_download("pyannote")
+    if snapshot_download is None:
+        return
 
     source = PYANNOTE_DEFAULTS.get(model_id)
     if not source:
@@ -139,7 +147,9 @@ def bootstrap_pyannote(model_id: str, target_dir: Path, hf_token: str) -> None:
 
 
 def bootstrap_qwen_asr(model_id: str, target_dir: Path) -> None:
-    from huggingface_hub import snapshot_download
+    snapshot_download = _import_hf_snapshot_download("Qwen3-ASR")
+    if snapshot_download is None:
+        return
 
     source = QWEN_DEFAULTS.get(model_id)
     if not source:
@@ -151,10 +161,36 @@ def bootstrap_qwen_asr(model_id: str, target_dir: Path) -> None:
 
 
 def bootstrap_qwen_forced_aligner(target_dir: Path) -> None:
-    from huggingface_hub import snapshot_download
+    snapshot_download = _import_hf_snapshot_download("Qwen3-ForcedAligner")
+    if snapshot_download is None:
+        return
 
     print(f"[DL] Qwen3-ForcedAligner -> {target_dir}")
     snapshot_download(repo_id=QWEN_FORCED_ALIGNER_DEFAULT, local_dir=str(target_dir))
+
+
+def _import_modelscope_snapshot_download(label: str):
+    try:
+        from modelscope.hub.snapshot_download import snapshot_download
+    except ModuleNotFoundError:
+        print(
+            f"[SKIP] Missing dependency 'modelscope'; cannot bootstrap {label} in the current environment. "
+            "如果你只想处理 Qwen 模型，可以忽略这条；如果要预热默认链，请先安装默认运行栈。"
+        )
+        return None
+    return snapshot_download
+
+
+def _import_hf_snapshot_download(label: str):
+    try:
+        from huggingface_hub import snapshot_download
+    except ModuleNotFoundError:
+        print(
+            f"[SKIP] Missing dependency 'huggingface_hub'; cannot bootstrap {label}. "
+            "请先安装 `huggingface_hub`，或改用 `huggingface-cli download` / `modelscope download` 手工下载。"
+        )
+        return None
+    return snapshot_download
 
 
 if __name__ == "__main__":

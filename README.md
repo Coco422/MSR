@@ -167,6 +167,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 - `pyannote` 需要先在 Hugging Face 接受 gated model 条件，再使用 token 下载
 - 当前 `speakerlab` 与 `pyannote 4.x` 仍存在上游 `numpy` 约束冲突，因此备选链在本机是通过 `uv pip install` 方式补齐，而不是直接回写到 `uv lock`
 - `Qwen3-ASR` 当前按本地目录加载，不在服务启动或模型加载时做远程拉取
+- `tools/bootstrap_models.py` 会先遍历当前配置里的默认模型，再按参数补备选模型；若当前环境缺少某条链的下载依赖，会打印 `[SKIP]` 并继续处理其他模型，不再整体中断
 
 启动服务后：
 

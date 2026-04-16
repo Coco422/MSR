@@ -55,6 +55,7 @@
 - [x] `config/models.toml` 已加入 `qwen3-asr-0.6b`、`qwen3-asr-1.7b` 与 `forced_aligner_path`
 - [x] `tools/runtime_env.sh` 已加入独立 `qwen` profile，固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
 - [x] `tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已补齐
+- [x] `bootstrap_models.py` 已改为按缺失下载依赖自动跳过，不再因无关后端缺包导致整次预热中断
 - [x] README、architecture、roadmap、Linux GPU handoff 已加入 Qwen vLLM 备选链说明
 
 ## 当前待推进
