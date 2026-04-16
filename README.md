@@ -43,6 +43,8 @@ MSR 的目标是把旧 demo 重构成一个真正适合长期维护的服务：
 
 更详细的设计说明见 [docs/architecture.md](docs/architecture.md)。
 
+处理流程图与 VAD / diarization 分工说明也已经补到 [docs/architecture.md](docs/architecture.md)。
+
 ## 4. 文档维护约定
 
 - 每次结束一轮开发、调试或验收，都要回看并更新 `README.md`

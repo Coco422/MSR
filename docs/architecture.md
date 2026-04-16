@@ -34,6 +34,42 @@ The service is exposed upstream as both a compatibility synchronous API and a ta
 11. ASR segments are matched to the diarization timeline by overlap
 12. Response is shaped to preserve the old demo contract or persisted for async result retrieval
 
+### Flow diagram
+
+```mermaid
+flowchart TD
+    A[客户端上传音频\n同步 /transcribe/\n或异步 submit] --> B[鉴权与任务准入]
+    B --> C{ASR 与说话人分离模型\n是否已加载}
+    C -- 否 --> Z1[直接返回错误]
+    C -- 是 --> D[写入临时目录]
+    D --> E[音频归一化\n单声道 16kHz]
+    E --> F[WebRTC VAD 检测语音区间]
+    F --> G{检测到语音?}
+    G -- 否 --> Z2[返回 No speech activity detected]
+    G -- 是 --> H[按 VAD 结果切粗粒度语音段]
+    H --> I[超过 20 秒的段\n继续切成 ASR chunk]
+    I --> J[整段音频送入 diarization\n3D-Speaker / pyannote]
+    J --> K[每个 ASR chunk 批量转写\nfaster-whisper / FunASR / Qwen3-ASR]
+    K --> L[把 chunk 结果偏移回全局时间轴]
+    L --> M[按 token 或片段时间戳\n与 diarization 时间轴对齐]
+    M --> N[重新拼句并回填 speaker]
+    N --> O[生成 transcripts / speakers_info]
+    O --> P{同步还是异步}
+    P -- 同步 --> Q[直接返回兼容旧版 JSON]
+    P -- 异步 --> R[持久化结果\n供状态查询与结果拉取]
+```
+
+### VAD role
+
+- 当前项目里确实在用 `WebRTC VAD`
+- VAD 的职责不是替代 diarization，而是先找出“哪里有语音”
+- diarization 仍然对整段音频做“谁在什么时候说话”
+- VAD 结果主要用于：
+  - 拒绝纯静音或无语音输入
+  - 把整段音频切成更适合 ASR 的粗粒度语音段
+  - 把超长语音段继续拆成 `<= 20s` 的 ASR chunk，降低显存峰值
+- 目前 `faster-whisper` 后端内部显式设置了 `vad_filter=False`，说明主链采用的是服务层统一 VAD，而不是依赖 ASR backend 自己再做一套切分
+
 ## Module boundaries
 
 - `core/`: pure app wiring, config, security, errors
