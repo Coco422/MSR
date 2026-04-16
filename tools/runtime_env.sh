@@ -17,7 +17,7 @@ MSR 运行环境切换脚本
 说明:
   default   : FunASR + 3D-Speaker + WebRTC VAD，偏兼容与当前默认链
   pyannote  : faster-whisper + pyannote，偏准确率优先
-  qwen      : Qwen3-ASR + 本地 vLLM + ForcedAligner，偏实验性 accuracy-first
+  qwen      : Qwen3-ASR + 3D-Speaker + 本地 vLLM + ForcedAligner，偏实验性 accuracy-first
   注意      : 需要切换到 pyannote 链路时，不要直接执行 uv run msr-api
 
 示例:
@@ -105,10 +105,14 @@ create_qwen_env() {
   uv venv --allow-existing --python "${PYTHON_BIN}" "${dir}"
   echo "[qwen] 安装项目基础依赖: dev"
   uv pip install --python "${python}" -e ".[dev]"
-  echo "[qwen] 安装 qwen-asr / vLLM 运行栈"
+  echo "[qwen] 安装 qwen-asr / vLLM / 3D-Speaker 运行栈"
   uv pip install --python "${python}" \
     "qwen-asr==0.0.6" \
-    "vllm==0.14.0"
+    "vllm==0.14.0" \
+    "speakerlab" \
+    "addict>=2.4.0,<3.0.0" \
+    "simplejson>=3.20.0,<4.0.0" \
+    "sortedcontainers>=2.4.0,<3.0.0"
 }
 
 setup_profiles() {

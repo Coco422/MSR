@@ -55,6 +55,7 @@
 - [x] `config/models.toml` 已加入 `qwen3-asr-0.6b`、`qwen3-asr-1.7b` 与 `forced_aligner_path`
 - [x] Qwen 默认启动参数已收敛：限制 `max_model_len` 并降低默认批量，避免 `12GB` 级显卡因 vLLM KV cache 过大而在 load 阶段失败
 - [x] `tools/runtime_env.sh` 已加入独立 `qwen` profile，固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
+- [x] `qwen` profile 已补齐 `speakerlab` 与 3D-Speaker 依赖，避免 Qwen 环境无法加载默认 diarization
 - [x] `tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已补齐
 - [x] `bootstrap_models.py` 已改为按缺失下载依赖自动跳过，不再因无关后端缺包导致整次预热中断
 - [x] README、architecture、roadmap、Linux GPU handoff 已加入 Qwen vLLM 备选链说明

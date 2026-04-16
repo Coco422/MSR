@@ -20,6 +20,7 @@ from msr.backends.asr.base import ASRBackend
 from msr.backends.asr.faster_whisper_backend import FasterWhisperBackend
 from msr.backends.asr.funasr_backend import FunASRBackend, _parse_funasr_result
 from msr.backends.asr.qwen_asr_backend import QwenASRBackend
+from msr.backends.diarization.three_d_speaker_backend import ThreeDSpeakerBackend
 from msr.backends.diarization.pyannote_backend import (
     PyannoteBackend,
     _extract_pyannote_annotation,
@@ -844,6 +845,27 @@ def test_qwen_load_reports_runtime_hint_when_vllm_dependency_is_missing(monkeypa
     message = str(exc_info.value)
     assert "missing dependency 'vllm'" in message
     assert "tools/runtime_env.sh run qwen" in message
+    assert "python=" in message
+
+
+def test_3d_speaker_load_reports_runtime_hint_when_speakerlab_is_missing(monkeypatch, tmp_path: Path):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "speakerlab.bin.infer_diarization":
+            raise ModuleNotFoundError("No module named 'speakerlab'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    backend = ThreeDSpeakerBackend("3dspeaker-default")
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(tmp_path, "cuda")
+
+    message = str(exc_info.value)
+    assert "missing dependency 'speakerlab'" in message
+    assert "tools/runtime_env.sh run default" in message
+    assert "tools/runtime_env.sh setup qwen" in message
     assert "python=" in message
 
 

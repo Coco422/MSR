@@ -8,6 +8,7 @@ from types import ModuleType
 
 from msr.backends.diarization.base import DiarizationBackend
 from msr.core.errors import BackendLoadError, TranscriptionError
+from msr.core.runtime_env import format_runtime_context
 from msr.core.types import SpeakerSegment
 from msr.services.audio_io import load_audio
 
@@ -45,6 +46,17 @@ class ThreeDSpeakerBackend(DiarizationBackend):
             self._model = Diarization3Dspeaker(**kwargs)
             self.options = load_options
             self.loaded = True
+        except ModuleNotFoundError as exc:
+            missing_name = exc.name or ""
+            if missing_name == "speakerlab" or missing_name.startswith("speakerlab.") or "speakerlab" in str(exc):
+                raise BackendLoadError(
+                    "Failed to load 3D-Speaker model from "
+                    f"{local_path}: missing dependency 'speakerlab'. "
+                    f"Current runtime: {format_runtime_context()}. "
+                    "默认链请使用 `bash tools/runtime_env.sh run default`，"
+                    "如果你要跑 Qwen + 3D-Speaker，请重新执行 `bash tools/runtime_env.sh setup qwen`。"
+                ) from exc
+            raise BackendLoadError(f"Failed to load 3D-Speaker model from {local_path}: {exc}") from exc
         except Exception as exc:
             raise BackendLoadError(f"Failed to load 3D-Speaker model from {local_path}: {exc}") from exc
         finally:

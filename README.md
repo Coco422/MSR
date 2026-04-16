@@ -99,9 +99,9 @@ bash tools/runtime_env.sh setup qwen
 
 - `default` 环境对应 `FunASR + 3D-Speaker + WebRTC VAD`
 - `pyannote` 环境对应 `faster-whisper + pyannote`
-- `qwen` 环境对应 `Qwen3-ASR + 本地 vLLM + ForcedAligner`
+- `qwen` 环境对应 `Qwen3-ASR + 3D-Speaker + 本地 vLLM + ForcedAligner`
 - 之所以拆多套 venv，是因为 `speakerlab`、`pyannote 4.x` 与 `Qwen3-ASR + vLLM` 的依赖栈都偏重，分开更利于长期维护和切换
-- `qwen` profile 额外固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
+- `qwen` profile 额外固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`，并会一起安装 `speakerlab`
 - `Qwen3-ASR` 的时间戳依赖 `ForcedAligner`，当前在 MSR 内部作为 Qwen backend 的必需辅助模型加载
 - `Qwen3-ASR` 默认会额外约束 `max_model_len`，避免 vLLM 按模型原始 `65536` 上下文在 `12GB` 级显卡上起过大的 KV cache
 - 如果要跑 `faster-whisper + pyannote`，不要直接执行 `uv run msr-api`
