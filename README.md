@@ -56,7 +56,7 @@ MSR 的目标是把旧 demo 重构成一个真正适合长期维护的服务：
 ```bash
 cd /path/to/MSR
 uv sync --extra dev --extra default-runtime
-export MSR_API_KEY="change-this"
+export MSR_API_KEY="change-me"
 uv run msr-api
 ```
 
@@ -186,6 +186,11 @@ uv run python tools/bootstrap_models.py --include-qwen
 - 样本：`16kHz / 单声道 / 17.19s` wav
 - 性能：`32s` 样本在 `faster-whisper large-v3 + 3D-Speaker` 链路下，ASR 约 `3.2s`
 - 管理面：`runtime/tasks`、`runtime/active`、`system/resources` 已验证能返回真实任务与 GPU 信息
+- Docker 恢复：`docker compose -f docker-compose.gpu.yml build msr && docker compose -f docker-compose.gpu.yml up -d msr` 已在本机通过
+- Docker 验证：容器内已成功加载 `faster-whisper-large-v3` 与 `3dspeaker-default`，并对 `samples/smoke/smoke_zh_3spk.mp3` 返回 `200`
+- Docker 离线验收：`bash tools/docker_offline_check.sh` 已在本机通过，`--network none` 下已完成 `/health`、模型 load 和 `/transcribe/` 全链路验证
+- Docker 性能：同一 `32s` mp3 在当前容器链路下总耗时约 `18.9s`
+- Docker 基座：`Dockerfile.gpu` 当前暂时复用本机已有的 `aimeeting-image-offline:latest` 作为恢复期本地基座，再补装 `faster-whisper`
 - 额外回归：`three-guys-record.mp3` 已验证按有效说话人分段返回，不再出现整段文本落到单一说话人的情况
 - 边界修复：说话人回填已升级为“词级时间戳归属后再重新拼句”，可把跨 speaker 边界的尾字头字拆开重分配
 - 管理面修复：模型 load / unload 过程已改为后台线程执行，并释放模型管理锁，避免单次加载拖住其它管理读请求
@@ -364,18 +369,33 @@ uv run python tools/bootstrap_models.py --include-qwen
 - `MS_SDK_OFFLINE=1`
 - `AIMEETING_STRICT_OFFLINE=1`
 
-建议的离线验收方式：
+建议的容器验证方式：
 
 ```bash
-docker run --rm --gpus all --network none \
-  -e MSR_API_KEY=change-this \
-  -v "$(pwd)/models:/app/models" \
-  -v "$(pwd)/data:/app/data" \
-  -p 8011:8011 \
-  msr-gpu-runtime:latest
+docker compose -f docker-compose.gpu.yml build msr
+docker compose -f docker-compose.gpu.yml up -d msr
 ```
 
-说明：`Docker + --network none` 的完整离线验收仍是当前待完成事项，见 [TODO.md](TODO.md)。
+如果要做严格离线验收，直接运行：
+
+```bash
+bash tools/docker_offline_check.sh
+```
+
+如果要指定自己的音频样本：
+
+```bash
+bash tools/docker_offline_check.sh /absolute/path/to/sample.wav
+```
+
+说明：
+
+- `tools/docker_offline_check.sh` 会在 `--network none` 的容器里自检 `/health`、默认模型 load 和同步 `/transcribe/`
+- `--network none` 下不能直接从宿主机访问容器端口，所以离线验收不要再用宿主机 `curl` 或浏览器联调
+- `Dockerfile.gpu` 当前为了先恢复服务，暂时复用本机已有的 `aimeeting-image-offline:latest` 作为本地基座，再补装 `faster-whisper`
+- 这条 Docker 主链已经在当前机器上完成真实转写验收
+- `Docker + --network none` 的完整离线验收已经在当前机器上通过
+- 后续仍需要把这个临时基座收敛成更轻、更可复现的独立 MSR 镜像
 
 ## 11. 常见问题
 

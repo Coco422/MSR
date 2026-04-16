@@ -61,6 +61,7 @@
 - [x] `bootstrap_models.py` 已改为按缺失下载依赖自动跳过，不再因无关后端缺包导致整次预热中断
 - [x] README、architecture、roadmap、Linux GPU handoff 已加入 Qwen vLLM 备选链说明
 - [x] 已新增 `docs/speaker-registry-design.md`，开始收敛 speaker registry 的文件存储、匹配流程和后续 API 草案
+- [x] 已补 `tools/docker_offline_check.sh`，可在 `--network none` 容器内完成健康检查、模型装载和同步转写自检
 
 ## 当前待推进
 
@@ -98,19 +99,22 @@
 - [x] 在 x86 Linux + NVIDIA GPU 环境执行 `uv sync --extra dev --extra default-runtime`
 - [x] 调用管理接口成功加载默认模型
 - [x] 用真实 wav 音频跑通 `/transcribe/`
+- [x] 用 Docker 容器成功加载 `faster-whisper-large-v3` 与 `3dspeaker-default`
+- [x] 用 Docker 容器成功跑通 `samples/smoke/smoke_zh_3spk.mp3`
+- [x] 用 `docker run --gpus all --network none` 完成默认链的 load + `/transcribe/` 离线验收
 - [x] 核对 `runtime/tasks` 与 `system/resources` 返回真实任务和 GPU 数据
 - [x] 记录真实环境关键版本：`Driver 570.211.01`、`CUDA 12.8`、`RTX 3060 12GB`
 
 ## 下一步重点
 
-- [ ] 执行 `docker build -f Dockerfile.gpu -t msr-gpu-runtime:latest .`
-- [ ] 用 `docker run --gpus all --network none` 做完整离线验收
+- [x] 执行 `docker build -f Dockerfile.gpu -t msr-gpu-runtime:latest .`
+- [x] 用 `docker run --gpus all --network none` 做完整离线验收
 - [ ] 验证 `faster-whisper + 3D-Speaker` 默认链路在多任务并发下的吞吐、排队和完成乱序表现
 - [x] 验证 `faster-whisper + pyannote` 备选链路
 - [ ] 验证 `Qwen3-ASR 0.6B` 备选链路
 - [ ] 记录 `Qwen3-ASR 1.7B` 在 `3060 12GB` 上是否可接受
 - [ ] 核对各模型是否仍有隐式联网行为
-- [ ] 验证容器内模型路径、权限、挂载方式
+- [x] 验证容器内模型路径、权限、挂载方式
 - [ ] 补一份真实环境依赖版本记录：CUDA、驱动、Docker、Python
 - [ ] 评估是否需要把当前任务摘要导出到日志或 metrics 系统
 
@@ -121,6 +125,7 @@
 - [x] 增加 `default-runtime` extra，避免默认链路首次部署就安装全量备选后端
 - [x] 将默认 GPU 依赖固定到 CUDA 12 兼容的 PyTorch 2.10 系列
 - [ ] 继续收敛 Docker 默认镜像，只保留 `faster-whisper + 3D-Speaker` 服务主链与必要运行数据目录挂载
+- [ ] 把当前临时 Docker 基座 `aimeeting-image-offline:latest` 替换为可独立复现的 MSR 基础镜像
 - [ ] 评估是否为 Qwen 链路单独维护额外的 handoff 文档或 benchmark 纪要
 - [ ] 确认是否需要拆 `Dockerfile.gpu` 和 `Dockerfile.gpu.slim`
 - [ ] 评估 `/transcribe/` 是否要补 `speaker_count_hint` 等可选参数
@@ -140,5 +145,6 @@
 
 - `tools/doctor.py`
 - `tools/smoke_api.py`
+- `tools/docker_offline_check.sh`
 - `docs/linux-gpu-handoff.md`
 - `.env.example`

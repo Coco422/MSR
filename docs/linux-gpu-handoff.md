@@ -93,16 +93,10 @@ uv run python tools/smoke_api.py \
 
 ```bash
 docker build -f Dockerfile.gpu -t msr-gpu-runtime:latest .
-docker run --rm --gpus all --network none \
-  -e MSR_API_KEY="$MSR_API_KEY" \
-  -v "$(pwd)/config:/app/config:ro" \
-  -v "$(pwd)/models:/app/models:ro" \
-  -v "$(pwd)/data:/app/data" \
-  -p 8011:8011 \
-  msr-gpu-runtime:latest
+docker compose -f docker-compose.gpu.yml up -d msr
 ```
 
-另开终端执行 smoke：
+如果要从宿主机联调接口，继续执行：
 
 ```bash
 uv run python tools/smoke_api.py \
@@ -112,6 +106,18 @@ uv run python tools/smoke_api.py \
   --diar-model 3dspeaker-default \
   --audio /absolute/path/to/sample.wav
 ```
+
+如果要做严格离线验收，不要再从宿主机直接 `curl`，而是运行：
+
+```bash
+bash tools/docker_offline_check.sh /absolute/path/to/sample.wav
+```
+
+说明：
+
+- `tools/docker_offline_check.sh` 会在 `--network none` 容器内启动服务，并在容器内部完成 `/health`、模型 load 和 `/transcribe/` 的全链路自检
+- `--network none` 下容器不会对宿主机暴露可访问网络，所以离线验收和普通联调需要分两种方式执行
+- `Dockerfile.gpu` 当前为了尽快恢复服务，暂时复用本机已有的 `aimeeting-image-offline:latest` 作为恢复期基座，后续仍要收敛成独立可复现的 MSR 基础镜像
 
 ## 5. 必须记录的数据
 
