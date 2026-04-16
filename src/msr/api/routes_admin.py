@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from msr.api.deps import get_container
 from msr.api.schemas import (
@@ -35,7 +36,7 @@ async def list_models(_: str = Depends(require_api_key), container=Depends(get_c
 async def load_model(kind: str, model_id: str, _: str = Depends(require_api_key), container=Depends(get_container)):
     try:
         logger.info("Admin requested model load kind=%s model_id=%s", kind, model_id)
-        return container.model_manager.load(kind, model_id)
+        return await run_in_threadpool(container.model_manager.load, kind, model_id)
     except (ModelBusyError, ModelNotLoadedError) as exc:
         logger.warning("Model load rejected kind=%s model_id=%s reason=%s", kind, model_id, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -48,7 +49,7 @@ async def load_model(kind: str, model_id: str, _: str = Depends(require_api_key)
 async def unload_model(kind: str, model_id: str, _: str = Depends(require_api_key), container=Depends(get_container)):
     try:
         logger.info("Admin requested model unload kind=%s model_id=%s", kind, model_id)
-        container.model_manager.unload(kind, model_id)
+        await run_in_threadpool(container.model_manager.unload, kind, model_id)
         return {"status": "unloaded", "kind": kind, "model_id": model_id}
     except (ModelBusyError, ModelNotLoadedError) as exc:
         logger.warning("Model unload rejected kind=%s model_id=%s reason=%s", kind, model_id, exc)

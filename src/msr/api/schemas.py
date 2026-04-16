@@ -40,6 +40,7 @@ class ModelInfo(BaseModel):
     default: bool
     path_exists: bool
     loaded: bool
+    operation_status: str | None = None
 
 
 class AuthCheckResponse(BaseModel):

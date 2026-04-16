@@ -30,7 +30,7 @@ from msr.core.errors import BackendLoadError
 from msr.core.config import AppConfig, ModelConfig, RuntimeConfig, SecurityConfig, Settings, WebConfig, load_settings
 from msr.core.types import SpeakerSegment, TextSegment, TimedToken
 from msr.services.audio_io import probe_duration
-from msr.services.model_manager import ASR_FACTORIES, DIARIZATION_FACTORIES
+from msr.services.model_manager import ASR_FACTORIES, DIARIZATION_FACTORIES, ModelManager
 from msr.services.transcription_service import (
     _build_speaker_presentations,
     _build_speakers_info,
@@ -274,6 +274,44 @@ def test_model_load_and_transcribe_flow(tmp_path: Path):
         assert recent
         assert recent[0]["status"] == "completed"
         assert recent[0]["filename"] == "sample.wav"
+
+
+def test_model_manager_list_models_remains_responsive_during_background_load(tmp_path: Path):
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowLoadASRBackend(FakeASRBackend):
+        def load(self, local_path: Path, device: str, options: dict | None = None) -> None:
+            started.set()
+            release.wait(timeout=2.0)
+            self.loaded = True
+
+    ASR_FACTORIES["funasr"] = SlowLoadASRBackend
+    DIARIZATION_FACTORIES["3d_speaker"] = FakeDiarizationBackend
+
+    manager = ModelManager(build_settings(tmp_path))
+    load_errors: list[Exception] = []
+
+    def do_load() -> None:
+        try:
+            manager.load("asr", "funasr-paraformer-zh")
+        except Exception as exc:  # pragma: no cover
+            load_errors.append(exc)
+
+    worker = threading.Thread(target=do_load)
+    worker.start()
+    assert started.wait(timeout=1.0)
+
+    started_at = time.perf_counter()
+    payload = manager.list_models()
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.2
+    assert any(item["operation_status"] == "loading" for item in payload)
+
+    release.set()
+    worker.join(timeout=2.0)
+    assert not load_errors
 
 
 def test_models_endpoint_lists_and_loads_qwen_models(tmp_path: Path):
