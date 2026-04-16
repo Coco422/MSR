@@ -53,6 +53,7 @@
 - [x] 转写编排已切到 clip 批量 ASR 接口，Qwen 链路可对单任务多个 VAD clip 做批推理
 - [x] Qwen backend 已接通 `ForcedAligner -> TimedToken` 映射，并复用现有 speaker token 级回填逻辑
 - [x] `config/models.toml` 已加入 `qwen3-asr-0.6b`、`qwen3-asr-1.7b` 与 `forced_aligner_path`
+- [x] Qwen 默认启动参数已收敛：限制 `max_model_len` 并降低默认批量，避免 `12GB` 级显卡因 vLLM KV cache 过大而在 load 阶段失败
 - [x] `tools/runtime_env.sh` 已加入独立 `qwen` profile，固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
 - [x] `tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已补齐
 - [x] `bootstrap_models.py` 已改为按缺失下载依赖自动跳过，不再因无关后端缺包导致整次预热中断
@@ -70,6 +71,7 @@
 - [ ] 基于真实准确率表现，评估是否把 `faster-whisper + pyannote` 提升为 accuracy-first 推荐链，甚至替换当前默认链
 - [ ] 在 `RTX 3060 12GB` 上完成 `qwen3-asr-0.6b + 3D-Speaker` 真机转写验收，记录加载耗时、转写耗时、显存峰值和长音频稳定性
 - [ ] 把 `qwen3-asr-1.7b` 作为实验链路做一次真机验证，明确是否因显存或稳定性原因保持非推荐状态
+- [ ] 基于真实 Qwen 验证结果，继续收敛 `max_model_len`、`max_inference_batch_size` 与 `gpu_memory_utilization` 的默认值
 - [ ] 对比同一批样本上的 `FunASR`、`faster-whisper`、`Qwen3-ASR` 主观准确率和 speaker 对齐效果
 - [ ] 评估是否需要把当前任务摘要导出到日志或 metrics 系统
 - [ ] 记录默认链在真实 GPU 环境下的显存峰值，而不只是加载后常驻占用

@@ -103,6 +103,7 @@ bash tools/runtime_env.sh setup qwen
 - 之所以拆多套 venv，是因为 `speakerlab`、`pyannote 4.x` 与 `Qwen3-ASR + vLLM` 的依赖栈都偏重，分开更利于长期维护和切换
 - `qwen` profile 额外固定 `qwen-asr==0.0.6` 与 `vllm==0.14.0`
 - `Qwen3-ASR` 的时间戳依赖 `ForcedAligner`，当前在 MSR 内部作为 Qwen backend 的必需辅助模型加载
+- `Qwen3-ASR` 默认会额外约束 `max_model_len`，避免 vLLM 按模型原始 `65536` 上下文在 `12GB` 级显卡上起过大的 KV cache
 - 如果要跑 `faster-whisper + pyannote`，不要直接执行 `uv run msr-api`
 - 如果要跑 `Qwen3-ASR`，同样不要直接执行 `uv run msr-api`
 - `uv run msr-api` 使用的是仓库默认 `.venv`，更适合默认链；准确率优先链请使用 `bash tools/runtime_env.sh run pyannote`
@@ -199,6 +200,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 - 内部能力：`ASRBackend` 已新增 `transcribe_many(...)`，Qwen 链路会对单任务内多个 VAD clip 做批量推理
 - 时间戳：`ForcedAligner` 作为 Qwen backend 的必需辅助模型，在 load 阶段一并初始化；缺路径、缺依赖或加载失败会直接 load 失败
 - 模型注册：已加入 `qwen3-asr-0.6b`、`qwen3-asr-1.7b` 和 `models/qwen/qwen3-forced-aligner-0.6b` 目录约定
+- 启动资源：当前默认把 `qwen3-asr-0.6b` 的 `max_model_len` 收敛到 `16384`、`qwen3-asr-1.7b` 收敛到 `8192`，更贴合我们 `20s` clip 的服务场景
 - 环境脚本：已新增 `tools/runtime_env.sh setup/run/exec qwen`
 - 工具链：`tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已就位
 - 当前结论：代码级与测试级接入已完成，`qwen` profile 也已开始实际安装校验；`RTX 3060 12GB` 上 `0.6B` 真机转写、显存峰值和 `1.7B` 稳定性仍待补验，不把它写成已完成验收

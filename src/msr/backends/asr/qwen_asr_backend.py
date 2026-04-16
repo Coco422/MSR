@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import logging
 from pathlib import Path
+import re
 from typing import Any, Sequence
 
 from msr.backends.asr.base import ASRBackend
@@ -79,23 +80,31 @@ class QwenASRBackend(ASRBackend):
             import torch
             from qwen_asr import Qwen3ASRModel
 
+            gpu_memory_utilization = float(load_options.get("gpu_memory_utilization", 0.7))
+            max_inference_batch_size = int(load_options.get("max_inference_batch_size", 32))
+            max_new_tokens = int(load_options.get("max_new_tokens", 1024))
+            max_model_len = int(load_options.get("max_model_len", 16384))
             forced_aligner_dtype = _resolve_torch_dtype(
                 torch,
                 str(load_options.get("forced_aligner_dtype", "float16")),
             )
             logger.info(
-                "Initializing Qwen3-ASR backend model_id=%s engine=%s device=%s path=%s forced_aligner=%s",
+                "Initializing Qwen3-ASR backend model_id=%s engine=%s device=%s path=%s forced_aligner=%s gpu_memory_utilization=%.2f max_model_len=%s max_inference_batch_size=%s",
                 self.model_id,
                 engine,
                 device,
                 local_path,
                 forced_aligner_path,
+                gpu_memory_utilization,
+                max_model_len,
+                max_inference_batch_size,
             )
             self._model = Qwen3ASRModel.LLM(
                 model=str(local_path),
-                gpu_memory_utilization=float(load_options.get("gpu_memory_utilization", 0.7)),
-                max_inference_batch_size=int(load_options.get("max_inference_batch_size", 32)),
-                max_new_tokens=int(load_options.get("max_new_tokens", 1024)),
+                gpu_memory_utilization=gpu_memory_utilization,
+                max_inference_batch_size=max_inference_batch_size,
+                max_new_tokens=max_new_tokens,
+                max_model_len=max_model_len,
                 forced_aligner=str(forced_aligner_path),
                 forced_aligner_kwargs={
                     "dtype": forced_aligner_dtype,
@@ -108,7 +117,7 @@ class QwenASRBackend(ASRBackend):
         except ModuleNotFoundError as exc:
             raise _missing_qwen_dependency_error(local_path, exc) from exc
         except Exception as exc:
-            raise BackendLoadError(f"Failed to load Qwen3-ASR model from {local_path}: {exc}") from exc
+            raise _normalize_qwen_load_error(local_path, exc, load_options) from exc
 
     def unload(self) -> None:
         self._model = None
@@ -286,3 +295,33 @@ def _missing_qwen_dependency_error(local_path: Path, exc: ModuleNotFoundError) -
             "`bash tools/runtime_env.sh setup qwen` 创建独立环境。"
         )
     return BackendLoadError(f"Failed to load Qwen3-ASR model from {local_path}: {exc}")
+
+
+def _normalize_qwen_load_error(local_path: Path, exc: Exception, load_options: dict[str, Any]) -> BackendLoadError:
+    message = str(exc)
+    lowered = message.lower()
+    if "available kv cache memory" in lowered or "estimated maximum model length" in lowered:
+        configured_max_model_len = int(load_options.get("max_model_len", 16384))
+        configured_gpu_memory_utilization = float(load_options.get("gpu_memory_utilization", 0.7))
+        estimated = _extract_estimated_max_model_len(message)
+        hint = (
+            f"Failed to load Qwen3-ASR model from {local_path}: vLLM KV cache memory is insufficient for the current "
+            f"startup settings. 当前配置 `max_model_len={configured_max_model_len}`、"
+            f"`gpu_memory_utilization={configured_gpu_memory_utilization:.2f}`。"
+        )
+        if estimated is not None:
+            hint += f" 该 GPU 当前估算可接受的 `max_model_len` 大约是 {estimated}。"
+        hint += " 请优先减小 `max_model_len`，必要时再调低批量或调整 `gpu_memory_utilization`。"
+        hint += f" 原始错误: {message}"
+        return BackendLoadError(hint)
+    return BackendLoadError(f"Failed to load Qwen3-ASR model from {local_path}: {exc}")
+
+
+def _extract_estimated_max_model_len(message: str) -> int | None:
+    matched = re.search(r"estimated maximum model length is (\d+)", message)
+    if not matched:
+        return None
+    try:
+        return int(matched.group(1))
+    except ValueError:
+        return None

@@ -930,6 +930,7 @@ def test_qwen_backend_maps_timestamps_and_languages(monkeypatch, tmp_path: Path)
             "gpu_memory_utilization": 0.65,
             "max_inference_batch_size": 32,
             "max_new_tokens": 1024,
+            "max_model_len": 16384,
             "forced_aligner_path": aligner_dir,
             "forced_aligner_dtype": "float16",
         },
@@ -947,7 +948,58 @@ def test_qwen_backend_maps_timestamps_and_languages(monkeypatch, tmp_path: Path)
     assert model_instance.kwargs["forced_aligner"] == str(aligner_dir)
     assert model_instance.kwargs["forced_aligner_kwargs"]["device_map"] == "cuda:0"
     assert model_instance.kwargs["forced_aligner_kwargs"]["dtype"] == "float16"
+    assert model_instance.kwargs["max_model_len"] == 16384
     assert model_instance.calls[0]["language"] == ["Chinese", "English"]
+
+
+def test_qwen_load_rewrites_kv_cache_error_with_actionable_hint(monkeypatch, tmp_path: Path):
+    model_dir = tmp_path / "qwen"
+    aligner_dir = tmp_path / "aligner"
+    model_dir.mkdir()
+    aligner_dir.mkdir()
+
+    fake_torch = types.SimpleNamespace(
+        float16="float16",
+        bfloat16="bfloat16",
+        float32="float32",
+    )
+
+    class FakeQwen3ASRModel:
+        @classmethod
+        def LLM(cls, **kwargs):
+            raise RuntimeError(
+                "To serve at least one request with the models's max seq len (65536), "
+                "(7.0 GiB KV cache is needed, which is larger than the available KV cache memory (2.39 GiB). "
+                "Based on the available memory, the estimated maximum model length is 22336."
+            )
+
+    fake_qwen_module = ModuleType("qwen_asr")
+    fake_qwen_module.Qwen3ASRModel = FakeQwen3ASRModel
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "qwen_asr", fake_qwen_module)
+    monkeypatch.setitem(sys.modules, "vllm", ModuleType("vllm"))
+
+    backend = QwenASRBackend(
+        "qwen3-asr-0.6b",
+        options={
+            "engine": "vllm",
+            "gpu_memory_utilization": 0.65,
+            "max_inference_batch_size": 16,
+            "max_new_tokens": 1024,
+            "max_model_len": 16384,
+            "forced_aligner_path": aligner_dir,
+            "forced_aligner_dtype": "float16",
+        },
+    )
+
+    with pytest.raises(BackendLoadError) as exc_info:
+        backend.load(model_dir, "cuda")
+
+    message = str(exc_info.value)
+    assert "KV cache memory is insufficient" in message
+    assert "max_model_len=16384" in message
+    assert "22336" in message
 
 
 def test_load_settings_resolves_model_option_paths(tmp_path: Path):
