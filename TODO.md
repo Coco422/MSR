@@ -27,6 +27,7 @@
 - [x] 模型目录切换为仓库内相对路径 `models/`
 - [x] `recent_tasks` 与异步结果文件已按 `recent_task_limit` 自动裁剪，当前默认保留 `50` 条
 - [x] README、architecture、roadmap、doctor 已补齐
+- [x] 首个上线版本已发布规划完成，统一使用 `v0.1.0` 作为首发标签
 - [x] 基础测试通过：`uv run --extra dev pytest`
 - [x] 在真实 Linux + NVIDIA GPU 环境验证默认链路可用
 - [x] 在真实 Linux + NVIDIA GPU 环境验证备选链 `faster-whisper + pyannote` 可加载并完成真实推理

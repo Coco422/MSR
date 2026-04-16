@@ -49,7 +49,12 @@ MSR 的目标是把旧 demo 重构成一个真正适合长期维护的服务：
 - `README.md` 负责记录当前可用能力、使用方式、真实环境验证结论
 - `TODO.md` 负责记录当前状态、下一步事项、未完成验收和后续规划
 
-## 5. 快速开始
+## 5. 发布标记
+
+- 首个上线版本使用注释标签 `v0.1.0`
+- 后续版本继续沿用语义化版本标签，便于在 GitHub 与公司私有仓库之间同步发布记录
+
+## 6. 快速开始
 
 ### 本地开发
 
@@ -210,7 +215,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 - 工具链：`tools/bootstrap_models.py --include-qwen` 与 `tools/doctor.py --include-qwen` 已就位
 - 当前结论：代码级与测试级接入已完成，`qwen` profile 也已开始实际安装校验；`RTX 3060 12GB` 上 `0.6B` 真机转写、显存峰值和 `1.7B` 稳定性仍待补验，不把它写成已完成验收
 
-## 6. 配置说明
+## 7. 配置说明
 
 ### `config/app.toml`
 
@@ -246,7 +251,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 - 禁止远程 repo id
 - 禁止运行时 token
 
-## 7. 模型准备
+## 8. 模型准备
 
 MSR 不负责下载模型。建议在仓库根目录下维护一个相对路径的 `models/` 目录，例如：
 
@@ -269,7 +274,7 @@ uv run python tools/bootstrap_models.py --include-alternates --hf-token "$HF_TOK
 uv run python tools/bootstrap_models.py --include-qwen
 ```
 
-## 8. API 说明
+## 9. API 说明
 
 ### `GET /health`
 
@@ -336,7 +341,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 
 当服务繁忙且等待队列已满时，`POST /transcribe/` 会返回 `503`，错误体包含 `queue_full`、当前并行上限和排队占用情况。
 
-## 9. GUI 说明
+## 10. GUI 说明
 
 控制台页面是管理人员使用和管理接口的示例页，不是终端客户前台。当前提供：
 
@@ -360,7 +365,7 @@ uv run python tools/bootstrap_models.py --include-qwen
 
 前端是纯 `HTML + JS + CSS`，不依赖框架，不使用 WebSocket，只做基础轮询。
 
-## 10. 离线部署说明
+## 11. 离线部署说明
 
 运行时会设置：
 
@@ -398,7 +403,7 @@ bash tools/docker_offline_check.sh /absolute/path/to/sample.wav
 - `Docker + --network none` 的完整离线验收已经在当前机器上通过
 - 后续仍需要把这个临时基座收敛成更轻、更可复现的独立 MSR 镜像
 
-## 11. 常见问题
+## 12. 常见问题
 
 ### 为什么服务启动后不能直接转写？
 
@@ -412,7 +417,7 @@ bash tools/docker_offline_check.sh /absolute/path/to/sample.wav
 
 因为 v1 目标是 KISS 和长期稳定，不引入账号系统、JWT 或数据库。
 
-## 12. 开发 Roadmap
+## 13. 开发 Roadmap
 
 ### Phase 0：设计冻结
 
@@ -443,7 +448,7 @@ bash tools/docker_offline_check.sh /absolute/path/to/sample.wav
 Linux + GPU 交接步骤见 [docs/linux-gpu-handoff.md](docs/linux-gpu-handoff.md)。
 speaker registry 设计草案见 [docs/speaker-registry-design.md](docs/speaker-registry-design.md)。
 
-## 13. 上游依赖项目链接
+## 14. 上游依赖项目链接
 
 - FunASR：用于 ASR 后端
   GitHub: <https://github.com/modelscope/FunASR>
